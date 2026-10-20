@@ -1,0 +1,4 @@
+# Preserve exact source and vendored artifact bytes on every platform. In
+# particular, Windows autocrlf must not invalidate speech provenance hashes or
+# change pinned build recipes and license texts during checkout.
+* -text

@@ -80,6 +80,7 @@ jobs:
           targets: ${{ matrix.target }}
       - run: npm ci
       - run: node scripts/platform-signing.mjs
+      - run: npm run release:check -- --production
       - run: npm run desktop:test
       - name: Build locally on the runner; do not create a release
         shell: bash

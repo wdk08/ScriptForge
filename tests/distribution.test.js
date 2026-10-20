@@ -4,8 +4,24 @@ import {readFile,writeFile,mkdtemp,mkdir,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {assertDistributionPolicy} from '../scripts/platform-signing.mjs';
 import {createArtifactChecksums} from '../scripts/artifact-checksums.mjs';
+
+test('Windows-style Git checkout preserves source patches and hash-bound speech bytes',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'scriptforge-checkout-')),source=join(root,'source'),checkout=join(root,'windows');
+ const paths=['.gitattributes','scripts/build-piper.mjs','vendor/piper/piper_phonemize.js','src-tauri/src/updates.rs'];
+ const expected=new Map();
+ try{
+  await mkdir(source);
+  for(const path of paths){const bytes=await readFile(path);expected.set(path,bytes);await mkdir(join(source,path,'..'),{recursive:true});await writeFile(join(source,path),bytes);}
+  const git=args=>execFileSync('git',args,{cwd:source,stdio:['ignore','pipe','pipe']});
+  git(['init','-q']);git(['config','core.autocrlf','false']);git(['add','.']);
+  git(['-c','user.name=Checkout fixture','-c','user.email=fixture@example.com','commit','-qm','Fixture']);
+  git(['clone','-q','--config','core.autocrlf=true',source,checkout]);
+  for(const path of paths)assert.deepEqual(await readFile(join(checkout,path)),expected.get(path),`${path} must keep its recorded bytes`);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 
 test('unsigned publisher policy preserves updater verification and requires Mac ad hoc integrity',async()=>{
  const config=JSON.parse(await readFile('src-tauri/tauri.conf.json')),before=JSON.stringify(config);assert.equal(assertDistributionPolicy(config),true);assert.equal(JSON.stringify(config),before);
