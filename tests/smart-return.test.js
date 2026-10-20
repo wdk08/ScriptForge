@@ -51,6 +51,7 @@ test('classification uses known names and following speech but does not mistake 
   assert.equal(classifyReturnFragment('THE DOOR', { originalType:'action', before:'An uncertain phrase ' }), 'action');
   assert.equal(classifyReturnFragment('AH', { originalType:'character', before:'NO' }), 'action');
   assert.equal(classifyReturnFragment('NIGHT', { originalType:'scene', before:'INT. ROOM - ' }), 'action');
+  assert.equal(classifyReturnFragment('>fade out.', { originalType:'dialogue', before:'A beat.' }), 'transition');
   assert.equal(classifyReturnFragment('SOPHIA', { originalType:'dialogue', before:'I love ', following:{type:'dialogue'}, characters:['SOPHIA'] }), 'action');
   assert.equal(classifyReturnFragment('Hello.', { originalType:'character', before:'NOAH ' }), 'dialogue');
   assert.equal(classifyReturnFragment('Hello.', { originalType:'parenthetical', before:'(quietly)', previous:{type:'character',text:'NOAH'} }), 'dialogue');

@@ -34,7 +34,7 @@ export function classifyScreenplayLine(text, { inDialogue = false, allowCue = fa
   if (hasScenePrefix(candidate) && (!inDialogue || candidate === candidate.toUpperCase()
     || Boolean(sceneLocation(candidate.replace(/\s+#[\w.-]+#\s*$/, ''))?.qualifier))
     || /^\.[\p{L}\p{N}]/u.test(candidate)) return 'scene';
-  if (allowTransition && (isCommonTransition(candidate) || /^>[^<]+$/.test(candidate))) return 'transition';
+  if ((allowTransition && isCommonTransition(candidate)) || /^>[^<]+$/.test(candidate)) return 'transition';
   if (allowCue && (cue(candidate) || (names.has(cueName(candidate)) && cue(candidate.toUpperCase())))
     && !narrative(candidate, names)) return 'character';
   if (allowParenthetical && /^\([^\n]*\)$/.test(candidate)) return 'parenthetical';
@@ -104,7 +104,7 @@ export function screenplayPaste(text) {
       if (pdfLayout) currentBase = indent;
       separated(); output.push(candidate.startsWith('.') ? candidate : `.${candidate}`);
       if (n === i + 1) output.push(''); dialogue = false; action = false; afterCue = false; afterParenthetical = false; speechIndent = null; detected = true;
-    } else if (kind === 'transition' || /^>[^<]+$/.test(candidate)) {
+    } else if (kind === 'transition') {
       separated(); output.push(candidate.startsWith('>') ? candidate : `>${candidate.toUpperCase()}`);
       if (n === i + 1) output.push(''); dialogue = false; action = false; afterCue = false; afterParenthetical = false; speechIndent = null; detected = true;
     } else if (kind === 'character') {

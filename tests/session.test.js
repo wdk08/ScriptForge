@@ -244,6 +244,9 @@ test('autosave writes temporary orphan speech literally, warns, and retains exac
   assert.ok(fs.state.source.includes('Exact speech — café!'));
   const saved=await store.get(session.record.id);
   assert.deepEqual(saved.recovery.document,doc);assert.deepEqual(saved.recovery.selection,selection);
+  assert.deepEqual(saved.fountainWarnings,session.fountainWarnings);
+  const reopened=new DocumentSession(store,fs.adapter,saved,saved.recovery.document);
+  assert.deepEqual(reopened.fountainWarnings,session.fountainWarnings);reopened.dispose();
   assert.deepEqual(session.document,doc);session.dispose();
 });
 
