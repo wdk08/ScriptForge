@@ -87,13 +87,22 @@ try {
   const child = spawn(binary, [], { env: { ...process.env, SCRIPTFORGE_DESKTOP_SMOKE_ROOT: root, SCRIPTFORGE_IMPORT_STRESS: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; child.stdout.on('data', data => { output += data; }); child.stderr.on('data', data => { output += data; });
   child.on('error', error => { output += String(error); });
-  const deadline = Date.now() + 240000; let report;
+  const deadline = Date.now() + 240000; let report, checkpointCreated = false, editsCheckpointed = false;
   while (Date.now() < deadline) {
     try { report = JSON.parse(await readFile(join(root, 'first-report.json'), 'utf8')); break; } catch {}
+    try {
+      const checkpoint = JSON.parse(await readFile(join(root, 'scripts/Update checkpoint.fountain'), 'utf8'));
+      if (!checkpointCreated) { checkpointCreated = true; console.log('Older installed app created its isolated file/recovery checkpoint.'); }
+      if (!editsCheckpointed && checkpoint.checks?.length) { editsCheckpointed = true; console.log('Updater completed download/install preparation and checkpointed pending edits before restart.'); }
+    } catch { /* The checkpoint appears only after the old app initializes. */ }
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   await writeFile(join(root, 'native.log'), output);
-  if (!report?.success || !report.installedAndRestarted) { child.kill(); throw new Error(`Installed update failed: ${JSON.stringify(report ?? { error: 'Timed out' })}. Evidence: ${root}`); }
+  if (!report?.success || !report.installedAndRestarted) {
+    const diagnostics = { checkpointCreated, editsCheckpointed, exitCode: child.exitCode, signalCode: child.signalCode };
+    child.kill();
+    throw new Error(`Installed update failed: ${JSON.stringify(report ?? { error: 'Timed out' })}. Diagnostics: ${JSON.stringify(diagnostics)}. Evidence: ${root}\nNative output: ${output.slice(-8000)}`);
+  }
   if (!windows) execFileSync('codesign', ['--verify', '--deep', '--strict', installed]);
   console.log(JSON.stringify({ ...report, archive: basename(archive), evidence: root }, null, 2));
 } finally { try { if (windowsEnvironment) diagnosticEnvironment(false); } finally { server.close(); } }

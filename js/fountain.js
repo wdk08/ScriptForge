@@ -130,7 +130,9 @@ function parseBody(source, options = {}) {
     } else if (['action', 'dialogue'].includes(type)) {
       if (type === 'action') { text = text.replace(/^(\s*)!/, '$1'); inDialogue = false; }
       else text = text.trim() ? text.trimStart() : text;
-      if (text === '  ') text = '';
+      // Two bare spaces encode a manual blank line. An explicit ! Action
+      // instead carries literal spaces (including a space-only Return suffix).
+      if (text === '  ' && !/^\s*!/.test(line.raw)) text = '';
       while (i < lines.length && classify(i, inDialogue) === type && !/^\s*!/.test(lines[i].raw)
         && !ranges.some(r => r.start >= lines[i].start && r.start < lines[i].end && !content.slice(lines[i].start, r.start).trim())) {
         text += '\n' + (lines[i].raw === '  ' ? '' : type === 'dialogue' && lines[i].raw.trim() ? lines[i].raw.trimStart() : lines[i].raw);
