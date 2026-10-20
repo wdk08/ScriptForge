@@ -38,13 +38,24 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
     const trimmed = ['character','transition','parenthetical','centered','section','synopsis'].includes(el.type)
       && el.text.trim() !== el.text;
     const invalidScene = el.type === 'scene' && !/^[\p{L}\p{N}]/u.test(el.text);
-    if (orphan || incomplete || trimmed || invalidScene) {
+    const singleLine = ['scene','character','transition','centered','lyric','section','synopsis'].includes(el.type) && el.text.includes('\n');
+    const hiddenDelimiter = (el.type === 'note' && (el.text.includes(']]') || el.text.endsWith(']')))
+      || (el.type === 'boneyard' && el.text.includes('*/'));
+    if (orphan || incomplete || trimmed || invalidScene || singleLine || hiddenDelimiter) {
       el.type = 'action'; delete el.dual; delete el.continuation; delete el.sceneNumber; delete el.depth; delete el.rightMarginOffsetPt;
       projected = true;
     }
     if (el.type === 'character') speech = true;
     else if (!['dialogue','parenthetical','lyric','note','boneyard'].includes(el.type)) speech = false;
   }
+  // A manual Action line can start with Fountain's forced-element syntax.
+  // Keep its literal text, using separate explicit Action blocks only in the
+  // export copy when one multiline block cannot express those boundaries.
+  doc.elements = doc.elements.flatMap(el => {
+    if (el.type !== 'action' || !el.text.split('\n').slice(1).some(line => /^[.!@>~#=]/.test(line.trimStart()))) return [el];
+    projected = true;
+    return el.text.split('\n').map(text => createElement('action', text));
+  });
   if (projected) onWarning(FOUNTAIN_LAYOUT_WARNING);
   if (!doc.source || explicitStructure) return serializeFountain(doc, { canonical: true });
   // Preserve exact imported spelling whenever the arrangement still permits it.

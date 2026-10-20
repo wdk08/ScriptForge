@@ -89,6 +89,17 @@ test('a Parenthetical split before existing Dialogue saves without modifying eit
   assert.equal(warnings.length,1);assert.match(warnings[0],/Exact text and types remain/);
 });
 
+test('split Note delimiters and multiline forced-syntax fragments save literal text with explicit warnings', () => {
+  for(const [type,text,at] of [['note','one]two',4],['section','First\nSecondThird',12],['action','First\n@NOAH\nNext words',2]]){
+    const {result}=split(type,text,at,type==='section'?{depth:1}:{}),before=structuredClone(result.document),warnings=[];
+    const source=fountainForSaving(result.document,{onWarning:w=>warnings.push(w)});
+    assert.deepEqual(result.document,before);assert.equal(warnings.length,1);
+    const parsed=editableElements(parseFountain(source));
+    const originalLines=body(result).flatMap(e=>e.text.split('\n'));
+    assert.deepEqual(parsed.flatMap(e=>e.text.split('\n')),originalLines);
+  }
+});
+
 test('forward/reverse selections replace only the selected text and retain all neighbours', () => {
   for (const reverse of [false,true]) {
     const els = [createElement('scene','INT. ROOM - DAY'),createElement('action','Before selected after'),createElement('transition','CUT TO:')];
