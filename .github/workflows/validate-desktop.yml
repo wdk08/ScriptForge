@@ -39,6 +39,11 @@ jobs:
       - run: npm run release:check -- --production
       - run: npm test
       - run: npm run check
+      - name: Chromium rendering and browser regression checks before native builds
+        run: |
+          npx playwright install --with-deps chromium
+          node scripts/probe-browser-fonts.mjs
+          npx playwright test --workers=2 --config=playwright.ci.config.js
       - run: npm run release:source
       - name: Retain corresponding source for the matching validation installers
         uses: actions/upload-artifact@v4
