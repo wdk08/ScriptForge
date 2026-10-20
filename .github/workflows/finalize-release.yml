@@ -58,7 +58,11 @@ jobs:
             if(jobs.some(j=>j.name!=='finish'&&j.conclusion!=='success'))throw new Error('An original prerequisite failed.');
             const validations=await github.paginate(github.rest.actions.listWorkflowRuns,{...context.repo,workflow_id:'validate-desktop.yml',status:'completed',event:'workflow_dispatch',per_page:100});
             if(!validations.some(r=>r.head_sha===sha&&r.head_branch==='main'&&r.conclusion==='success'))throw new Error('Exact-commit installed-update acceptance missing.');
-            const {data:release}=await github.rest.repos.getReleaseByTag({...context.repo,tag:'v1.0.0'});
+            // Drafts have no public tag yet; the tag lookup endpoint returns 404.
+            const releases=await github.paginate(github.rest.repos.listReleases,{...context.repo,per_page:100});
+            const matches=releases.filter(r=>r.tag_name==='v1.0.0');
+            if(matches.length!==1)throw new Error('Expected exactly one existing v1.0.0 release draft.');
+            const release=matches[0];
             if(!release.draft||release.prerelease||release.target_commitish!==sha||release.name!=='ScriptForge v1.0.0')throw new Error('Existing draft target/state does not match; never recreate or overwrite a release.');
             core.setOutput('release_id',String(release.id));
             core.info(`Continuing existing draft ${release.id}; binaries/source remain from ${sha}. Original builds: ${run.html_url}`);
