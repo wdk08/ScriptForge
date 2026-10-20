@@ -308,7 +308,16 @@ jobs:
           gh release download "v$RELEASE_VERSION" --pattern '*.dmg' --pattern '*.app.tar.gz' --pattern '*.exe' --dir release-review/installers
           node scripts/artifact-checksums.mjs release-review/installers --upload "v$RELEASE_VERSION"
           gh release download "v$RELEASE_VERSION" --pattern latest.json --dir release-review
-          node scripts/validate-update-manifest.mjs release-review/latest.json release-assets.json
+      - name: Bind updater metadata to stable uploaded asset IDs and verify before publication
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('node:fs');
+            const manifestApi=await import(`${process.env.GITHUB_WORKSPACE}/scripts/validate-update-manifest.mjs`);
+            const assets=JSON.parse(fs.readFileSync('release-assets.json'));
+            const bound=manifestApi.bindManifestToAssets(JSON.parse(fs.readFileSync('release-review/latest.json')),process.env.RELEASE_VERSION,assets);
+            fs.writeFileSync('release-review/latest.json',JSON.stringify(bound,null,2)+'\n');
+            await require('./scripts/release-attachments.cjs').uploadFiles(github,context.repo,{id:process.env.RELEASE_ID,version:process.env.RELEASE_VERSION,commit:context.sha,reuse:true,replaceMetadata:true,files:['release-review/latest.json']});
       - name: Publish only after explicit dispatch approval
         if: inputs.publish
         run: gh release edit "v$RELEASE_VERSION" --draft=false --latest

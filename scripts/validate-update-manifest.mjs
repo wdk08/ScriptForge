@@ -1,6 +1,22 @@
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 export const platforms=['darwin-aarch64','darwin-x86_64','windows-x86_64'];
+// Draft browser_download_url values may use an untagged-* placeholder until publication.
+// Resolve exact uploaded asset identities, then use stable authenticated/public API URLs.
+export function bindManifestToAssets(manifest,version,assets){
+ validateManifest(manifest,version);
+ const bound=structuredClone(manifest),root='https://api.github.com/repos/wdk08/ScriptForge/releases/assets/';
+ for(const platform of platforms){
+  const item=bound.platforms[platform],url=new URL(item.url).href;
+  const matches=assets.filter(a=>url===`${root}${a.id}`||url===a.browser_download_url||url===`https://github.com/wdk08/ScriptForge/releases/download/v${version}/${encodeURIComponent(a.name)}`);
+  if(matches.length!==1)throw new Error(`Missing or ambiguous uploaded asset: ${platform}`);
+  const asset=matches[0];
+  const pattern=platform==='darwin-aarch64'?/_(?:aarch64|arm64)\.app\.tar\.gz$/:platform==='darwin-x86_64'?/_(?:x64|x86_64)\.app\.tar\.gz$/:/_(?:x64|x86_64)-setup\.exe$/;
+  if(!Number.isSafeInteger(asset.id)||asset.id<=0||asset.state!=='uploaded'||!asset.size||!pattern.test(asset.name))throw new Error(`Incorrect uploaded platform asset: ${platform}`);
+  item.url=`${root}${asset.id}`;
+ }
+ validateManifest(bound,version,assets);return bound;
+}
 export function validateManifest(manifest,version,assets){
  if(manifest.version!==version||typeof manifest.notes!=='string'||!Number.isFinite(Date.parse(manifest.pub_date)))throw new Error('Updater version, notes or publication date is invalid.');
  for(const platform of platforms){

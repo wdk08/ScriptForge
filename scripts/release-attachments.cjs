@@ -26,11 +26,22 @@ async function ensureDraft(github, repo, {version, commit, refresh, body}) {
   const {data:readback} = await github.rest.repos.getRelease({...repo, release_id:release.id});
   return assertDraft(readback, version);
 }
-async function uploadFiles(github, repo, {id, version, commit, files}) {
+async function uploadFiles(github, repo, {id, version, commit, files, reuse = false, replaceMetadata = false}) {
   const {data:release} = await github.rest.repos.getRelease({...repo, release_id:Number(id)});
   assertDraft(release, version, commit);
   for (const file of files) {
     const bytes = fs.readFileSync(file), name = require('node:path').basename(file);
+    if (reuse) {
+      const assets = await github.paginate(github.rest.repos.listReleaseAssets, {...repo, release_id:release.id});
+      const existing = assets.filter(a => a.name === name);
+      if (existing.length > 1) throw new Error(`Ambiguous existing asset: ${name}`);
+      if (existing.length) {
+        const hash = `sha256:${require('node:crypto').createHash('sha256').update(bytes).digest('hex')}`;
+        if (existing[0].size === bytes.length && existing[0].digest === hash && existing[0].state === 'uploaded') continue;
+        if (!replaceMetadata || name !== 'latest.json') throw new Error(`Existing asset bytes differ: ${name}`);
+        await github.rest.repos.deleteReleaseAsset({...repo, asset_id:existing[0].id});
+      }
+    }
     const {data:asset} = await github.rest.repos.uploadReleaseAsset({...repo, release_id:release.id, name, data:bytes,
       headers:{'content-type':'application/octet-stream','content-length':bytes.length}});
     if (asset.name !== name || asset.size !== bytes.length || asset.state !== 'uploaded') throw new Error(`Upload readback failed: ${name}`);

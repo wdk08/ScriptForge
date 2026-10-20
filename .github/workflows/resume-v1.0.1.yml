@@ -79,10 +79,13 @@ jobs:
             const plan=JSON.parse(fs.readFileSync('release-upload/upload-plan.json'));
             const id=Number(process.env.RELEASE_ID),version=process.env.RELEASE_VERSION,commit=process.env.APP_COMMIT;
             const {data:release}=await github.rest.repos.getRelease({...context.repo,release_id:id});api.assertDraft(release,version,commit);
-            const old=await github.paginate(github.rest.repos.listReleaseAssets,{...context.repo,release_id:id});
-            for(const asset of old)await github.rest.repos.deleteReleaseAsset({...context.repo,asset_id:asset.id});
             const names=[...plan.source,...plan.packages,...plan.metadata];
-            for(const group of [plan.source,plan.packages,plan.metadata])await api.uploadFiles(github,context.repo,{id,version,commit,files:group.map(n=>`release-upload/${n}`)});
+            for(const group of [plan.source,plan.packages])await api.uploadFiles(github,context.repo,{id,version,commit,reuse:true,files:group.map(n=>`release-upload/${n}`)});
+            const uploaded=await github.paginate(github.rest.repos.listReleaseAssets,{...context.repo,release_id:id});
+            const manifestApi=await import(`${process.env.GITHUB_WORKSPACE}/scripts/validate-update-manifest.mjs`);
+            const bound=manifestApi.bindManifestToAssets(JSON.parse(fs.readFileSync('release-upload/latest.json')),version,uploaded);
+            fs.writeFileSync('release-upload/latest.json',JSON.stringify(bound,null,2)+'\n');
+            await api.uploadFiles(github,context.repo,{id,version,commit,reuse:true,replaceMetadata:true,files:['release-upload/latest.json']});
             const assets=await github.paginate(github.rest.repos.listReleaseAssets,{...context.repo,release_id:id});
             if(assets.length!==names.length)throw new Error('Unexpected release asset count.');
             for(const name of names){
