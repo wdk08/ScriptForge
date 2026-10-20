@@ -35,7 +35,37 @@ concurrency:
   group: scriptforge-official-release
   cancel-in-progress: false
 jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main' && github.repository == 'wdk08/ScriptForge'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fast workflow dependency and attachment regression tests
+        run: node --test tests/release-attachments.test.js
+      - name: Check inputs, draft identity and real attachment permissions before native validation
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+          REFRESH: ${{ inputs.refresh_draft }}
+          LICENSE_REVIEWED: ${{ inputs.license_reviewed }}
+          PUBLISH: ${{ inputs.publish }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const version = process.env.VERSION, commit = process.env.COMMIT;
+            if (commit !== context.sha || JSON.parse(fs.readFileSync('package.json')).version !== version || process.env.LICENSE_REVIEWED !== 'true') throw new Error('Exact commit, version and licensing approval are required.');
+            if (process.env.PUBLISH === 'true' && process.env.CONFIRMATION !== `ScriptForge v${version}`) throw new Error('Publication confirmation mismatch.');
+            const api = require('./scripts/release-attachments.cjs');
+            const release = await api.ensureDraft(github, context.repo, {version,commit,refresh:process.env.REFRESH === 'true',body:fs.readFileSync(`releases/v${version}.md`,'utf8')});
+            await api.probeAttachment(github, context.repo, release, version, `${context.runId}-${context.runAttempt}`);
   validation:
+    needs: preflight
     if: github.ref == 'refs/heads/main' && github.repository == 'wdk08/ScriptForge'
     uses: ./.github/workflows/validate-desktop.yml
     with:
@@ -108,7 +138,7 @@ jobs:
             const version = process.env.RELEASE_VERSION, tag = `v${version}`;
             const releases = await github.paginate(github.rest.repos.listReleases, context.repo);
             const existing = releases.find(r => r.tag_name === tag);
-            if (existing && (!existing.draft || existing.prerelease || process.env.REFRESH_DRAFT !== 'true')) throw new Error('Only an explicitly approved unpublished stable draft can be refreshed.');
+            if (existing && (!existing.draft || existing.prerelease || (process.env.REFRESH_DRAFT !== 'true' && existing.target_commitish !== context.sha))) throw new Error('Only an explicitly approved unpublished stable draft can be refreshed.');
             try { await github.rest.git.getRef({...context.repo, ref:`tags/${tag}`}); throw new Error('Tag already exists.'); } catch (error) { if (error.status !== 404) throw error; }
             if (!releases.some(r => !r.draft && !r.prerelease) && version !== '1.0.0') throw new Error('The first public release must be 1.0.0.');
             const body = require('fs').readFileSync(`releases/v${version}.md`, 'utf8');
@@ -119,10 +149,12 @@ jobs:
               const assets = await github.paginate(github.rest.repos.listReleaseAssets, {...context.repo, release_id:existing.id});
               for (const asset of assets) await github.rest.repos.deleteReleaseAsset({...context.repo, asset_id:asset.id});
             }
-            const options = {...context.repo, target_commitish:context.sha, name:`ScriptForge v${version}`, body, draft:true, prerelease:false};
+            const options = {...context.repo, tag_name:tag, target_commitish:context.sha, name:`ScriptForge v${version}`, body, draft:true, prerelease:false};
             const {data} = existing
               ? await github.rest.repos.updateRelease({...options, release_id:existing.id})
               : await github.rest.repos.createRelease({...options, tag_name:tag});
+            const {data:readback} = await github.rest.repos.getRelease({...context.repo, release_id:data.id});
+            require('./scripts/release-attachments.cjs').assertDraft(readback, version, context.sha);
             core.setOutput('release_id', String(data.id));
   source:
     needs: draft
@@ -146,10 +178,17 @@ jobs:
       - run: npm ci
       - run: cargo fetch --locked --manifest-path src-tauri/Cargo.toml
       - run: npm run licenses:check
-      - name: Prepare and attach corresponding source before any installer
-        run: |
-          npm run release:source
-          gh release upload "v$RELEASE_VERSION" "dist/source/ScriptForge-$RELEASE_VERSION-source.tar.gz" "dist/source/ScriptForge-$RELEASE_VERSION-source.tar.gz.sha256"
+      - run: npm run release:source
+      - name: Attach corresponding source to the verified release ID before any installer
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+        with:
+          script: |
+            await require('./scripts/release-attachments.cjs').uploadFiles(github, context.repo, {
+              id:process.env.RELEASE_ID,version:process.env.RELEASE_VERSION,commit:context.sha,
+              files:[`dist/source/ScriptForge-${process.env.RELEASE_VERSION}-source.tar.gz`,`dist/source/ScriptForge-${process.env.RELEASE_VERSION}-source.tar.gz.sha256`]
+            });
   build:
     needs: [draft, source]
     permissions:
