@@ -21,7 +21,7 @@ Download published installers from [GitHub Releases](https://github.com/wdk08/Sc
 
 The downloads use ad hoc/unnotarized Mac signing and no Windows publisher signature. Expect OS warnings and possible policy blocks; read [installation instructions and limitations](INSTALLING.md). In-app update signatures remain required and do not confer publisher trust.
 
-The first official version is **1.0.0**. Desktop targets are macOS 12+ and Windows x64. Apple Silicon builds are locally testable; Intel/Windows CI builds and real installed-update tests require validation before release. If no installers appear, a public release has not yet been published.
+The first official version is **1.0.0**. Desktop targets are macOS 12+ and Windows x64. Release validation requires native tests, signed-package verification, packaged save/reopen checks and a real installed update on each supported architecture. See [platform validation](docs/PLATFORM-VALIDATION.md) for test scope and OS-policy limitations. If no installers appear, a public release has not yet been published.
 
 Older development installations without an updater need a manual first installation. Replace the application only; keep its data and your screenplay folder. A development version numerically higher than 1.0.0 will not be downgraded by the updater.
 

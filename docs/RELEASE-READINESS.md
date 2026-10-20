@@ -1,6 +1,8 @@
 # Public release readiness
 
-This records preparation, not a claim that an update has shipped.
+This records acceptance requirements, not a claim that an update has shipped. The
+owner authorized pushing the clean GPLv3 history and publishing v1.0.0 after all
+required checks pass. No release is triggered by a source push.
 
 ## Locally configured
 
@@ -16,17 +18,17 @@ This records preparation, not a claim that an update has shipped.
 
 ## Still required before publication
 
-- Owner approval to push the reviewed source; separate approval for initial release publication. No upload is authorized by the preparation request.
+- Conditional release authorization was provided for v1.0.0. Preserve the original development commit privately and push only the clean publication history.
 - Validate the new GPLv3 source/notice packaging in the approved cross-platform workflow. The owner authorized GPL-3.0-only for original code/artwork. Piper is rebuilt from pinned sources; actual source archive and voice tests are required. See docs/LICENSING-REVIEW.md.
-- Owner reports both updater secrets configured; the approved build must verify they match the embedded public key. No paid Apple/Windows credentials are required under the owner-selected ad hoc/unnotarized Mac and unsigned Windows policy. Repository security settings are not changed automatically.
-- Review the initial commit inventory before approving a push. No destructive Git operation is required.
+- Every native build must verify real updater bytes and signed versions against the embedded public key. No paid Apple/Windows credentials are required under the owner-selected ad hoc/unnotarized Mac and unsigned Windows policy. Repository security settings are not changed automatically.
+- Review the source inventory and full-history audit. No destructive Git operation is required.
 - Execute Intel/Windows CI builds and verify actual signatures/installers on those platforms. Apple Silicon compilation alone proves neither.
 - Verify public metadata/binary access after an approved release exists.
-- Approve an isolated test update channel if needed; perform a real installed-version download/install/restart/data-preservation test on macOS and Windows. No end-to-end update success is claimed yet.
+- Validate desktop builds must pass on the exact main SHA, including real installed-version download/install/restart/data-preservation tests on both Mac architectures and Windows. Official release enforces this prerequisite before creating a draft. See docs/PLATFORM-VALIDATION.md for test isolation and OS-policy limits.
 
 ## Audit boundaries
 
-.gitignore excludes dependencies/build outputs, .env/private key/certificate files, local grants, databases, local screenplay folders, recovery/backups and historical validation/. Curated screenplay/media fixtures remain included. No private signing key is read by the public-key helper. No existing Git history was present. GPL-3.0-only is now explicitly authorized for original work, with third-party licenses retained. The original commit is preserved.
+.gitignore excludes dependencies/build outputs, .env/private key/certificate files, local grants, databases, local screenplay folders, recovery/backups and historical validation/. Curated screenplay/media fixtures remain included. No private signing key is read by the public-key helper. GPL-3.0-only is explicitly authorized for original work, with third-party licenses retained. Original development commit 3ae83aa is preserved privately; public history starts with clean licensed snapshot f6e9776.
 
 The audit prints filenames/categories rather than matched secret values. Pattern scanning supplements manual review; it cannot guarantee detection of every sensitive item. Third-party license obligations remain separate and mandatory.
 

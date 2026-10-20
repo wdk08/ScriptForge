@@ -5,16 +5,17 @@ and explicitly chose **no paid Apple/Windows publisher credentials**. ScriptForg
 uses ad hoc/unnotarized macOS apps and unsigned Windows apps/installers. Updater
 signatures and signed-version verification remain mandatory. This choice removes
 the paid-signing prerequisite; it does not remove OS policy/installation friction.
-See INSTALLING.md. The existing initial commit is preserved. No source push,
-workflow dispatch, release/draft upload or publication is authorized by this file.
+See INSTALLING.md. The existing initial commit is preserved. The owner separately
+authorized the clean source push, validation and v1.0.0 publication conditional on
+all required checks passing; this file grants no authorization for future releases.
 
 ## 1. Confirm the updater secrets through the approved build
 
 The existing production public key stays unchanged. The workflow requires
 TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, signs actual
 update packages and verifies them with the official plugin and embedded public
-key. No secret value is displayed or fetched by the audit. Local GitHub CLI is
-not authenticated, so the owner's setup is recorded as reported, not as tested.
+key. No secret value is displayed or fetched by the audit. A passing signature step
+proves the configured private/public key match; a reported secret setup alone does not.
 Do not generate another production key, send secrets in chat, or purchase platform
 certificates for this route. No APPLE_* or WINDOWS_* secret is needed.
 
@@ -22,7 +23,7 @@ certificates for this route. No APPLE_* or WINDOWS_* secret is needed.
 
 After approval to push a reviewed commit, dispatch **Validate desktop builds** on
 that exact main SHA. It has contents:read, no release-writing job and no automatic
-push trigger. Separate approval is needed to upload its validation artifacts.
+push trigger. The owner's v1.0.0 authorization includes validation artifacts.
 
 - Apple Silicon: macos-15 / aarch64-apple-darwin.
 - Intel: macos-15-intel / x86_64-apple-darwin.
@@ -74,8 +75,30 @@ Do not publish a fake 1.0.1 solely for testing. Prepare two local builds on an
 isolated test identity/storage, with a throwaway updater key and test endpoint;
 version A must be lower than B. Alternatively use an explicitly approved isolated
 prerelease channel. Keep production config/key/endpoint and real user data intact.
-A local harness still needs review/implementation; no test release is created by
-the validation workflow and no real installed update has been performed yet.
+The implemented scripts/test-installed-update.mjs runs on every native runner. It
+serves already verified production 1.0.0 bytes/signatures from loopback HTTPS to a
+disposable 0.99.0 source copy and requires a native installedAndRestarted report.
+Only that older test copy enables updater checking under isolated diagnostics and
+accepts the temporary server certificate. Production source, public key, HTTPS
+requirements and signed 1.0.0 archive remain unchanged. No production private key
+is read by the harness and no public test release is created.
+
+Mac paths are canonicalized so the updater's symlink protection remains enforced.
+Windows runs only on pristine GitHub-hosted ScriptForge runners, installs the older
+per-user NSIS package, then exercises the actual signed NSIS update and relaunch.
+Diagnostic environment markers are temporarily set in that disposable VM's user
+environment and broadcast to Explorer so RunAsUser preserves test-data isolation;
+they are removed afterward. Existing personal installations are rejected. System
+trust, endpoint protection and actual user documents are never changed.
+
+The test checks pending edits, manual About discovery, Later, actual download,
+installation, restart, exact recovery, same-file content, settings, grants and
+backups. Mac adds a post-install edit before restarting; Windows adds an edit after
+download and before Install and Restart. Tamper/version/save-failure cases are
+separate native/controller regression tests. A compilation or ordinary reopen
+cannot produce a passing installed-update report. A failed GUI test must be fixed,
+not skipped. For local Mac diagnosis, provide a verified bundle directory and
+optionally SCRIPTFORGE_UPDATE_TEST_TARGET_ROOT for a disposable build cache.
 
 Run on both Mac architectures and Windows:
 
@@ -104,8 +127,10 @@ checksums and latest.json. Its matrix checks ad hoc/unsigned status rather than
 requiring paid certificates. A draft does not exercise stable public discovery.
 Never overwrite/delete an existing draft/tag blindly; inspect failed runs.
 
-Publishing v1.0.0 remains a separate explicit approval. Verify public metadata,
-binary/source/checksum access after that approval; no public reachability is
+Official release refuses a draft/publication until the exact main commit has a
+successful three-platform Validate desktop builds run. The owner has provided
+conditional v1.0.0 publication approval. Verify public metadata,
+binary/source/checksum access after publication; no public reachability is
 claimed before publication. No test should reset the user's real application data.
 
 Primary documentation:
