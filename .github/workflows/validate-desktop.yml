@@ -6,6 +6,16 @@ on:
         description: 'Full reviewed main commit SHA (no release or tag is created)'
         required: true
         type: string
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: true
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: true
 permissions:
   contents: read
 concurrency:
