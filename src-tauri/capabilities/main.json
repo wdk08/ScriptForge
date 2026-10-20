@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Local ScriptForge window. Native file access is constrained to picker-granted paths in Rust.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

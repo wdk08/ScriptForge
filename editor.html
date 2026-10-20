@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><script src="./js/theme.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f6f3">
+  <title>ScriptForge · Screenplay editor</title>
+  <link rel="stylesheet" href="./css/editor.css"><link rel="stylesheet" href="./css/character-rename.css"><link rel="stylesheet" href="./css/scene-autocomplete.css">
+  <link rel="stylesheet" href="./css/files.css"><link rel="stylesheet" href="./css/title-page.css">
+  <link rel="stylesheet" href="./css/layout.css"><link rel="stylesheet" href="./css/table-read.css"><link rel="stylesheet" href="./css/voice-library.css">
+  <script src="./js/launch.js" defer></script><script type="module" src="./js/startup.js" data-entry="editor"></script>
+<link rel="stylesheet" href="./css/editor-features.css"><link rel="stylesheet" href="./css/theme.css"><link rel="stylesheet" href="./css/screenplay-format.css"></head>
+<body class="editor-app loading-editor">
+  <header class="app-header">
+    <a id="home" href="./index.html" class="home-button" title="Screenplay library" aria-label="Home">←</a>
+    <img class="brand-logo" src="./scriptForgeLogo.png" width="44" height="44" alt="" aria-hidden="true">
+    <div class="document-heading">
+      <div class="brand-name">SCRIPTFORGE <span class="stage-badge">SCREENPLAY EDITOR</span></div>
+      <label class="sr-only" for="document-title">Screenplay title</label>
+      <input id="document-title" value="The Last Signal" maxlength="200" aria-label="Screenplay title">
+      <span id="disk-save-state" class="disk-save-state" role="status">Unsaved changes</span><span id="save-state" class="save-state" role="status">Opening screenplay…</span>
+    </div>
+    <div class="header-actions">
+      <button id="save" class="quiet-button">Save</button><details class="export-menu"><summary id="export" class="primary-button">Export <span aria-hidden="true">↗</span></summary><div class="export-options"><button id="export-fountain">Export as Fountain</button><button id="export-pdf">Export as PDF</button></div></details>
+    </div>
+  </header>
+  <nav class="editing-bar" aria-label="Editing tools">
+    <details class="file-menu toolbar-menu"><summary>File</summary><div class="file-menu-items"><button id="new-document">New screenplay</button><button id="open-file">Open Fountain file…</button><button id="import-file">Import a copy…</button><button id="version-history">Version History</button><button id="export-copy">Export as Fountain</button><button id="export-pdf-copy">Export as PDF</button></div></details>
+    <details class="tools-menu toolbar-menu"><summary>Tools</summary><div class="file-menu-items"><button id="simulate-table-read">Simulate Table Read</button><button id="rename-character">Rename Character</button><button id="dialogue-statistics">Character Dialogue Statistics</button><button id="focus-mode" aria-pressed="false">Focus Mode</button><button id="find-screenplay">Find &amp; Replace</button><button id="paste-plain-text" aria-pressed="false">Paste as Plain Text: Off</button></div></details>
+    <div class="history-tools">
+      <button id="undo" title="Undo (⌘/Ctrl Z)" aria-label="Undo">↶</button>
+      <button id="redo" title="Redo (⌘/Ctrl Shift Z)" aria-label="Redo">↷</button>
+    </div>
+    <span class="toolbar-divider"></span>
+    <label for="zoom" class="sr-only">Page zoom</label>
+    <select id="zoom" aria-label="Page zoom"><option value="fit" selected>Fit width</option><option value="0.75">75%</option><option value="0.9">90%</option><option value="1">100%</option><option value="1.25">125%</option></select>
+    <span class="toolbar-divider"></span>
+    <button id="outline-toggle" aria-pressed="true">☷ <span>Outline</span></button>
+    <span class="bar-spacer"></span>
+    <label class="autosave-control"><input id="file-autosave" type="checkbox" checked disabled> Autosave to file</label>
+    <span class="paper-spec">US Letter · Courier 12 pt</span>
+    <button id="screenplay-settings" class="quiet-button">Settings</button><button id="help" class="help-button">Keyboard guide <span aria-hidden="true">?</span></button>
+  </nav>
+  <section id="document-banner" class="document-banner" hidden aria-live="polite"><span id="banner-message"></span><button id="recreate-file" hidden>Recreate file</button><button id="reconnect-file" hidden>Reconnect file</button><button id="review-file-error" hidden>Review file changes</button></section>
+  <nav id="format-toolbar" class="format-toolbar" aria-label="Screenplay element format">
+    <span class="toolbar-label">ELEMENT</span>
+    <button data-format="scene">Scene</button><button data-format="action">Action</button>
+    <button data-format="character">Character</button><button data-format="parenthetical">Parenthetical</button>
+    <button data-format="dialogue">Dialogue</button><button data-format="transition">Transition</button>
+    <span class="toolbar-divider"></span>
+    <button data-format="dualCharacter">Dual Character</button><button data-format="dualParenthetical">Dual Parenthetical</button><button data-format="dualDialogue">Dual Dialogue</button>
+  </nav>
+  <section id="find-panel" class="search-panel" hidden aria-label="Find and Replace">
+<div class="search-row"><label>Find <input id="find-query" type="search" autocomplete="off"></label><output id="find-count" aria-live="polite">0 of 0</output><button id="find-previous">Previous</button><button id="find-next">Next</button><button id="find-advanced" aria-expanded="false">Advanced</button><button id="find-expand" aria-expanded="false">Replace</button><button id="find-close" aria-label="Close search">×</button></div>
+<div id="replace-row" class="search-row" hidden><label>Replace With <input id="replace-text"></label><button id="replace-one">Replace</button><button id="replace-all">Replace All</button></div>
+<div id="find-options" hidden><label><input id="find-case" type="checkbox">Case Sensitive</label><label><input id="find-word" type="checkbox">Match Whole Words</label><div id="find-types">Search In: </div></div></section><main class="workspace">
+    <aside id="outline" class="outline" aria-label="Screenplay outline">
+      <div class="outline-heading">SCENES <span id="scene-count"></span></div>
+      <div id="scene-list" role="navigation" aria-label="Scenes" tabindex="0"></div>
+      <div class="outline-note"><span class="note-icon">✦</span><p>Room for your next story.</p><small>Tab starts the next element.<br>Enter keeps you writing.</small></div>
+    </aside>
+    <section class="document-viewport" aria-label="Screenplay workspace">
+      <div class="workspace-caption"><span id="workspace-title">THE LAST SIGNAL</span><span>SCREENPLAY</span></div>
+      <article id="title-page" class="title-page" aria-label="Screenplay title page"></article>
+      <div id="pages" class="pages" contenteditable="false" role="textbox" aria-label="Screenplay editor" aria-multiline="true" spellcheck="true" autocorrect="on" autocapitalize="off" tabindex="0"></div>
+      <div class="end-hint">Your story continues here. <kbd>Enter</kbd> to add an element.</div>
+    </section>
+  </main>
+  <footer class="status-bar"><span><span class="status-dot"></span> <span id="element-status">Action</span></span><span id="document-stats"></span><span class="session-note">Local screenplay</span></footer>
+  <div id="notice" role="status" class="notice" hidden></div>
+  <dialog id="table-read-dialog" class="table-read" aria-labelledby="tr-title">
+    <header class="tr-header"><div><span class="eyebrow">SIMULATE TABLE READ</span><h1 id="tr-title"></h1></div><button id="tr-close" class="secondary-button">Back to editor</button></header>
+    <section class="tr-transport" aria-label="Table read playback">
+      <div class="tr-status"><span id="tr-state" class="tr-state" role="status">Idle</span><strong id="tr-speaker">Ready to read</strong><span id="tr-position"></span><span id="tr-engine-activity" role="status"></span></div>
+      <div class="tr-buttons"><button id="tr-play" class="primary-button">Play</button><button id="tr-pause" class="secondary-button">Pause</button><button id="tr-stop" class="secondary-button">Stop</button><button id="tr-restart" class="secondary-button">Restart</button><button id="tr-previous" class="secondary-button">Previous</button><button id="tr-next" class="secondary-button">Next</button><label>Playback speed<select id="tr-speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div>
+      <div class="tr-progress-row"><label for="tr-progress">Screenplay progress</label><span id="tr-percent">0%</span><input id="tr-progress" type="range" min="0" max="100" step="0.1" value="0" aria-describedby="tr-progress-description"><small id="tr-progress-description">Based on spoken elements, not audio duration. Drag or click to jump.</small></div>
+      <div class="tr-navigation"><label>Start from<select id="tr-scene"><option value="">Beginning</option></select></label><button id="tr-cast-toggle" class="secondary-button" aria-expanded="true" aria-controls="tr-sidebar">Cast &amp; voices</button></div>
+    </section>
+    <div id="tr-error" class="tr-error" role="alert" hidden></div>
+    <div id="tr-body" class="tr-body">
+      <aside id="tr-sidebar" class="tr-sidebar" aria-label="Character voice assignments">
+        <div class="tr-cast-heading"><h2>Cast &amp; voices <span id="tr-cast-count"></span></h2><button id="tr-voice-library" class="tr-library-button">Voice Library</button><button id="tr-refresh-voices">Refresh voices</button><p id="tr-engine-notice" role="status"></p><label class="tr-read-headings"><input id="tr-read-headings" type="checkbox">Read scene headings aloud</label><small id="tr-preference-status" role="status">Loading voice settings…</small></div>
+        <div id="tr-cast" class="tr-cast"></div>
+      </aside>
+      <section class="tr-preview" aria-label="Table read screenplay preview"><div class="tr-preview-heading"><div><h2>Screenplay</h2><small id="tr-selection">Choose a paragraph to start from.</small></div><button id="tr-read-here" class="secondary-button" disabled>Start Reading Here</button></div><div id="tr-script" class="tr-script" tabindex="0"></div></section>
+    </div>
+    <footer class="tr-footer">Piper voices run locally. Browser voices vary by device and may use an online service. Dual dialogue plays left speaker, then right. Voice changes apply to the next speech segment.</footer>
+  </dialog>
+  <dialog id="screenplay-settings-dialog" aria-labelledby="screenplay-settings-title">
+    <span class="eyebrow">THIS SCREENPLAY</span><h1 id="screenplay-settings-title">Screenplay settings</h1>
+    <p>Formatting applies to this screenplay and its PDF exports. Screenplay Folder and Voice Library apply in this browser. Changes save automatically.</p>
+    <label class="script-setting"><input id="bold-scene-headings" type="checkbox"> Bold scene headings</label>
+    <div class="scene-number-setting"><label class="script-setting"><input id="scene-numbers" type="checkbox"> Scene numbers</label><button id="redo-scene-numbers" class="secondary-button">Redo Numbers</button></div>
+    <p class="dialog-note">When enabled, scene numbers stay sequential as you edit. Redo Numbers assigns every scene a fresh number in script order, starting at 1. Fountain exports preserve these numbers; bold styling stays in ScriptForge and PDF exports.</p>
+    <section class="settings-section"><h2>Appearance</h2><div class="appearance-options"><label><input type="radio" name="appearance" value="light"> Light</label><label><input type="radio" name="appearance" value="dark"> Dark</label><label><input type="radio" name="appearance" value="system" checked> System</label></div><p id="appearance-status" role="status"></p></section>
+<section class="settings-section"><h2>Backups</h2><label><input id="backups-enabled" type="checkbox" checked> Automatic Backups Enabled</label><p><label>Backup Interval <select id="backup-interval"><option value="1">Every 1 Minute</option><option value="5">Every 5 Minutes</option><option value="10" selected>Every 10 Minutes</option><option value="15">Every 15 Minutes</option><option value="30">Every 30 Minutes</option></select></label></p><button id="settings-version-history">Open Version History</button><p>Backups use a separate browser database. Clearing browser data removes them. They do not protect against disk failure or device loss. Autosave remains active when backups are disabled.</p><p id="backup-status" role="status"></p></section>
+<section class="settings-section"><h2>Screenplay Folder</h2><p>Current Folder: <output id="settings-folder-name">Loading…</output></p><button id="screenplay-folder">Change Folder</button><p>New scripts use this folder. Existing linked files stay in their original locations.</p></section>
+    <section class="settings-section writer-profile"><h2>Writer Profile</h2><p>Local defaults for new screenplays. Existing title pages keep their own information.</p>
+      <label>Author name<input id="writer-author" autocomplete="name"></label>
+      <label>Mailing address<textarea id="writer-address" rows="3" autocomplete="street-address"></textarea></label>
+      <label>Phone number<input id="writer-phone" type="tel" autocomplete="tel"></label>
+      <label>Email address<input id="writer-email" type="email" autocomplete="email"></label>
+      <button id="save-writer-profile" class="secondary-button">Save Changes</button><p id="writer-profile-status" role="status"></p>
+    </section>
+    <section class="settings-section"><h2>Voice Library</h2><p>Manage imported voice models.</p><button id="voice-library">Manage Voice Library</button></section>
+    <div class="dialog-actions"><button id="settings-done" class="primary-button">Done</button></div>
+  </dialog>
+  <dialog id="help-dialog">
+    <form method="dialog"><button class="dialog-close" aria-label="Close keyboard guide">×</button></form>
+    <span class="eyebrow">MAKE YOURSELF AT HOME</span><h1>A little rhythm for your writing.</h1>
+    <dl><dt>⌘ / Ctrl + Click</dt><dd>Toggle continuation on a Character cue. Overrides stay in ScriptForge's browser document. Fountain files export the visible continuation text without internal metadata.</dd><dt>⌘ / Ctrl + F</dt><dd>Find across the screenplay. Add Shift + H instead for Replace. Enter and Shift + Enter navigate results; Escape closes search.</dd><dt>⌘ / Ctrl + Shift + F</dt><dd>Toggle Focus Mode. Escape returns to the writing room.</dd><dt>⌘ / Ctrl + 1–6</dt><dd>1 Scene Heading · 2 Action · 3 Character · 4 Parenthetical · 5 Dialogue · 6 Transition. Works only in the screenplay editor. Some browsers reserve these keys for tab switching and may prevent interception.</dd><dt>Plain text paste</dt><dd>Tools → Paste as Plain Text bypasses screenplay detection until switched off. Single-line paste always inserts text normally.</dd><dt>INT. / EXT.</dt><dd>Typing either prefix at the start of action creates a scene heading.</dd><dt>Enter</dt><dd>After character or parenthetical, start dialogue. After dialogue, start action. Filled lines stay intact; only blank lines change in place.</dd><dt>⌘ / Ctrl + ] / [ / \</dt><dd>Move the selected elements’ right text boundaries right / left by 5 points, or reset. Left indentation stays unchanged. Overrides stay in ScriptForge; plain Fountain omits custom margins.</dd><dt>Shift + Enter</dt><dd>A line break within the current element.</dd><dt>Tab</dt><dd>Dialogue → parenthetical; parenthetical → dialogue; character → parenthetical; empty character → transition. Filled lines create the next element below.</dd><dt>Shift + Tab</dt><dd>Advance backward through element types on a new line, or change a blank line.</dd><dt>Character cues</dt><dd>Names automatically capitalize while typing.</dd><dt>⌘ / Ctrl + Z</dt><dd>Undo. Add Shift to redo.</dd><dt>⌘ / Ctrl + S</dt><dd>Save to the linked file or Screenplay Folder.</dd><dt>Backspace / Delete</dt><dd>Delete text, or merge at an element boundary. Clearing a parenthetical also clears its brackets.</dd></dl>
+    <p>Select across elements to format, copy, or replace them together. The second character of simultaneous dialogue uses Dual Character. The two speech blocks then appear side by side.</p>
+    <p class="dialog-note">Recovery snapshots are saved automatically in this browser. Autosave stays enabled and updates the linked Fountain file after edits. Choose Screenplay Folder for unlinked drafts; supported browser file access and permission are required. Export downloads a separate copy. Fountain emphasis markers remain visible while editing.</p>
+  </dialog>
+  <dialog id="recovery-dialog"><span class="eyebrow">PICK UP WHERE YOU LEFT OFF</span><h1>Unsaved changes are available.</h1><p id="recovery-description"></p><p class="dialog-note">Recovering changes only opens the snapshot in the editor. Opening recovery does not change the original file. Continuing to edit resumes autosaving to that file.</p><div class="dialog-actions"><button id="open-saved" class="secondary-button">Open saved version</button><button id="recover-changes" class="primary-button">Recover changes</button></div><button id="recovery-home" class="quiet-button">Back to library</button></dialog>
+  <dialog id="file-conflict-dialog"><span class="eyebrow">YOUR FILE HAS CHANGED</span><h1>Review before replacing.</h1><p id="file-conflict-message"></p><label class="comparison-label">Current local file<textarea id="disk-version" readonly></textarea></label><label class="comparison-label">Your version<textarea id="editor-version" readonly></textarea></label><div class="dialog-actions"><button id="conflict-close" class="secondary-button">Keep editing</button><button id="conflict-copy" class="secondary-button">Export a copy</button><button id="conflict-overwrite" class="primary-button">Replace reviewed file</button></div></dialog>
+  <button id="focus-exit" class="focus-exit" hidden>Exit Focus Mode · Esc</button>
+<dialog id="statistics-dialog" class="feature-dialog" aria-labelledby="statistics-title"><header><h1 id="statistics-title">Character Dialogue Statistics</h1><button id="statistics-close" aria-label="Close statistics">×</button></header><table><thead><tr><th><button data-stat-sort="name">Character</button></th><th><button data-stat-sort="blocks">Blocks</button></th><th><button data-stat-sort="words">Words</button></th><th><button data-stat-sort="percent">Percent</button></th></tr></thead><tbody id="statistics-rows"></tbody></table><p id="statistics-totals"></p></dialog>
+<dialog id="versions-dialog" class="feature-dialog" aria-labelledby="versions-title"><header><h1 id="versions-title">Version History</h1><button id="versions-close" aria-label="Close version history">×</button></header><p>Independent browser snapshots. Clearing browser data removes these backups; these are not protection against device loss.</p><div id="version-list" class="version-list"></div><pre id="version-preview" aria-label="Version preview"></pre><p id="version-status" role="status"></p><div class="dialog-actions"><button id="version-refresh">Refresh</button><button id="version-snapshot">Back Up Now</button><button id="version-restore" class="primary-button" disabled>Restore</button></div></dialog>
+<dialog id="restore-confirm-dialog" class="feature-dialog"><h1>Restore this version?</h1><p>Your current screenplay will be backed up before restoring. Its linked file will then autosave the restored version.</p><div class="dialog-actions"><button id="restore-cancel">Cancel</button><button id="restore-confirm" class="primary-button">Back up current and restore</button></div></dialog>
+<div id="measurement" class="measurement" aria-hidden="true"></div>
+</body>
+</html>

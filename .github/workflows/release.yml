@@ -1,0 +1,251 @@
+name: Official release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, matching source metadata (first release: 1.0.0)'
+        required: true
+        type: string
+      commit:
+        description: 'Full reviewed main commit SHA (40 characters)'
+        required: true
+        type: string
+      license_reviewed:
+        description: 'I have resolved bundled eSpeak NG redistribution/licensing obligations'
+        required: true
+        default: false
+        type: boolean
+      publish:
+        description: 'Publish after all checks pass (off creates a nonpublic draft)'
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: 'For publishing, type ScriptForge vX.Y.Z exactly'
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: scriptforge-official-release
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.ref == 'refs/heads/main' && github.repository == 'wdk08/ScriptForge'
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_COMMIT: ${{ inputs.commit }}
+      RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+      LICENSE_REVIEWED: ${{ inputs.license_reviewed }}
+      PUBLISH: ${{ inputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fetch --locked --manifest-path src-tauri/Cargo.toml
+      - run: npm run licenses:check
+      - name: Validate reviewed commit and approval inputs
+        run: |
+          node --input-type=module <<'JS'
+          if (!/^[a-f0-9]{40}$/.test(process.env.RELEASE_COMMIT) || process.env.RELEASE_COMMIT !== process.env.GITHUB_SHA) throw new Error('Dispatch from the exact reviewed main HEAD.');
+          if (process.env.LICENSE_REVIEWED !== 'true') throw new Error('Licensing review is required before uploading artifacts.');
+          if (process.env.PUBLISH === 'true' && process.env.RELEASE_CONFIRMATION !== `ScriptForge v${process.env.RELEASE_VERSION}`) throw new Error('Publication confirmation does not match.');
+          JS
+      - run: npm run release:check -- --production
+      - run: npm run audit:history
+      - run: npm run audit:public
+      - run: npm test
+      - run: npm run check
+      - run: npm run build:desktop
+      - name: Chrome regression suite
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test --workers=2 --config=playwright.ci.config.js
+  draft:
+    needs: review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Create a new draft; never overwrite an existing release or tag
+        id: create
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        with:
+          script: |
+            const version = process.env.RELEASE_VERSION, tag = `v${version}`;
+            const releases = await github.paginate(github.rest.repos.listReleases, context.repo);
+            if (releases.some(r => r.tag_name === tag)) throw new Error('Release already exists. Inspect it; do not overwrite or rerun blindly.');
+            try { await github.rest.git.getRef({...context.repo, ref:`tags/${tag}`}); throw new Error('Tag already exists.'); } catch (error) { if (error.status !== 404) throw error; }
+            if (!releases.some(r => !r.draft && !r.prerelease) && version !== '1.0.0') throw new Error('The first public release must be 1.0.0.');
+            const body = require('fs').readFileSync(`releases/v${version}.md`, 'utf8');
+            const {data} = await github.rest.repos.createRelease({...context.repo, tag_name:tag, target_commitish:context.sha, name:`ScriptForge v${version}`, body, draft:true, prerelease:false});
+            core.setOutput('release_id', String(data.id));
+  source:
+    needs: draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: wdk08/ScriptForge
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: cargo fetch --locked --manifest-path src-tauri/Cargo.toml
+      - run: npm run licenses:check
+      - name: Prepare and attach corresponding source before any installer
+        run: |
+          npm run release:source
+          gh release upload "v$RELEASE_VERSION" "dist/source/ScriptForge-$RELEASE_VERSION-source.tar.gz" "dist/source/ScriptForge-$RELEASE_VERSION-source.tar.gz.sha256"
+  build:
+    needs: [draft, source]
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      # Tauri Action merges latest.json; serialize uploads to avoid metadata races.
+      max-parallel: 1
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            arch: arm64
+            bundles: dmg,app
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            arch: x86_64
+            bundles: dmg,app
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: npm ci
+      - name: Require updater signing credentials
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo 'Configure the updater signing secrets.'; exit 1; }
+      - run: node scripts/platform-signing.mjs
+      - run: npm run release:check -- --production
+      - run: npm run desktop:test
+      - name: Build installers and signed updater packages with official Tauri Action
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          tagName: v${{ inputs.version }}
+          releaseCommitish: ${{ github.sha }}
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          updaterJsonPreferNsis: true
+      - name: Verify updater signatures and signed versions with official native plugin
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example verify_updater -- src-tauri/tauri.conf.json src-tauri/target/${{ matrix.target }}/release/bundle
+      - name: Verify ad hoc Mac signature and target architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="src-tauri/target/${{ matrix.target }}/release/bundle/macos/ScriptForge.app"
+          codesign --verify --deep --strict "$app"
+          codesign --display --verbose=4 "$app" 2> signature-status.txt
+          grep -q 'Signature=adhoc' signature-status.txt
+          lipo "$app/Contents/MacOS/scriptforge" -verify_arch "${{ matrix.arch }}"
+      - name: Verify Windows artifacts have no publisher signature
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe')
+          $files += Get-Item 'src-tauri/target/x86_64-pc-windows-msvc/release/scriptforge.exe'
+          foreach ($file in $files) { if ((Get-AuthenticodeSignature $file.FullName).Status -ne 'NotSigned') { throw 'Expected unsigned Windows distribution; inspect unexpected signature state.' } }
+      - name: Record distribution limitations
+        shell: bash
+        run: |
+          echo 'macOS: ad hoc signed, not Developer ID signed or notarized. Windows: no Authenticode publisher signature. Updater signatures are independently required and verified. See INSTALLING.md for Gatekeeper/SmartScreen/Smart App Control limitations.' >> "$GITHUB_STEP_SUMMARY"
+  finish:
+    needs: [draft, source, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: wdk08/ScriptForge
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate all three platform signatures and asset references before publication
+        run: |
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --slurp --jq 'add' > release-assets.json
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const assets=JSON.parse(readFileSync('release-assets.json'));
+          for (const name of [`ScriptForge-${process.env.RELEASE_VERSION}-source.tar.gz`,`ScriptForge-${process.env.RELEASE_VERSION}-source.tar.gz.sha256`]) {
+            if(!assets.some(a=>a.name===name&&a.size>0))throw new Error('Corresponding-source asset missing; refusing publication.');
+          }
+          JS
+          gh release download "v$RELEASE_VERSION" --pattern '*.dmg' --pattern '*.app.tar.gz' --pattern '*.exe' --dir release-review/installers
+          node scripts/artifact-checksums.mjs release-review/installers --upload "v$RELEASE_VERSION"
+          gh release download "v$RELEASE_VERSION" --pattern latest.json --dir release-review
+          node scripts/validate-update-manifest.mjs release-review/latest.json release-assets.json
+      - name: Publish only after explicit dispatch approval
+        if: inputs.publish
+        run: gh release edit "v$RELEASE_VERSION" --draft=false --latest
+      - name: Verify public discovery and asset downloads
+        if: inputs.publish
+        run: |
+          curl --fail --retry 4 --retry-delay 5 --location 'https://github.com/wdk08/ScriptForge/releases/latest/download/latest.json' --output public-latest.json
+          node scripts/validate-update-manifest.mjs public-latest.json release-assets.json --public
+      - name: Report release state
+        if: always()
+        run: |
+          echo 'Review the draft/published release and workflow results in GitHub. Failed builds never pass the publication job.' >> "$GITHUB_STEP_SUMMARY"

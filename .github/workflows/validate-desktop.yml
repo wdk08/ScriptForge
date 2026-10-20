@@ -1,0 +1,137 @@
+name: Validate desktop builds
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Full reviewed main commit SHA (no release or tag is created)'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: scriptforge-desktop-validation
+  cancel-in-progress: false
+jobs:
+  source:
+    if: github.ref == 'refs/heads/main' && github.repository == 'wdk08/ScriptForge'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate exact approved commit
+        env:
+          REVIEWED_COMMIT: ${{ inputs.commit }}
+        run: |
+          test "$REVIEWED_COMMIT" = "$GITHUB_SHA" || { echo 'Dispatch from the reviewed main HEAD.'; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: cargo fetch --locked --manifest-path src-tauri/Cargo.toml
+      - run: npm run audit:history
+      - run: npm run audit:public
+      - run: npm run licenses:check
+      - run: npm run release:check -- --production
+      - run: npm test
+      - run: npm run check
+      - run: npm run release:source
+      - name: Retain corresponding source for the matching validation installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: corresponding-source
+          path: dist/source/*
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+  build:
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            arch: arm64
+            bundles: dmg,app
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            arch: x86_64
+            bundles: dmg,app
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: npm ci
+      - run: node scripts/platform-signing.mjs
+      - run: npm run desktop:test
+      - name: Build locally on the runner; do not create a release
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo 'Updater signing secret is missing.'; exit 1; }
+          npm run tauri -- build --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"
+      - name: Verify actual updater artifact signatures and versions
+        run: cargo run --manifest-path src-tauri/Cargo.toml --example verify_updater -- src-tauri/tauri.conf.json src-tauri/target/${{ matrix.target }}/release/bundle
+      - name: Verify Mac ad hoc signature and architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="src-tauri/target/${{ matrix.target }}/release/bundle/macos/ScriptForge.app"
+          codesign --verify --deep --strict "$app"
+          codesign --display --verbose=4 "$app" 2> signature-status.txt
+          grep -q 'Signature=adhoc' signature-status.txt
+          lipo "$app/Contents/MacOS/scriptforge" -verify_arch "${{ matrix.arch }}"
+      - name: Verify unsigned Windows publisher status
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe')
+          $files += Get-Item 'src-tauri/target/x86_64-pc-windows-msvc/release/scriptforge.exe'
+          foreach ($file in $files) { if ((Get-AuthenticodeSignature $file.FullName).Status -ne 'NotSigned') { throw 'Unexpected Windows signature state.' } }
+      - name: Packaged save and reopen proof on this platform
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = 'Windows' ]; then
+            node scripts/smoke-desktop.mjs 'src-tauri/target/x86_64-pc-windows-msvc/release/scriptforge.exe'
+          else
+            node scripts/smoke-desktop.mjs "src-tauri/target/${{ matrix.target }}/release/bundle/macos/ScriptForge.app/Contents/MacOS/scriptforge"
+          fi
+      - name: Create download integrity checksums
+        run: node scripts/artifact-checksums.mjs src-tauri/target/${{ matrix.target }}/release/bundle
+      - name: Retain installers for approved manual platform validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sha256
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+      - name: Record validation limits
+        if: always()
+        shell: bash
+        run: |
+          echo 'Validation artifacts only; no GitHub Release, tag, source push or publication performed by this workflow. Tauri updater signatures are distinct from publisher signing. Browser-quarantined installation and real installed-app updating still require separate tests. See INSTALLING.md and docs/PLATFORM-VALIDATION.md.' >> "$GITHUB_STEP_SUMMARY"
