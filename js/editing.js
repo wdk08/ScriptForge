@@ -3,7 +3,7 @@ import { dualElementIds } from './document.js';
 import { toggleContinuation } from './continuations.js';
 import { replaceMatches } from './search.js';
 import { changeTitlePage } from './title-page.js';
-import { screenplayPaste, insertScreenplayPaste, normalizeScreenplayClipboard } from './screenplay-paste.js';
+import { screenplayPaste, insertScreenplayPaste, normalizeScreenplayClipboard, classifyReturnFragment } from './screenplay-paste.js';
 import { createElement, validateDocument, dialogueGroups } from './document.js';
 import { screenplaySettings, changeScreenplaySettings, redoSceneNumbers } from './screenplay-settings.js';
 import { hasScenePrefix, completeSceneLocation } from './scene-locations.js';
@@ -233,6 +233,12 @@ export function editDocument(document, selection, command) {
   const range = orderedSelection(doc, next);
   let el = range.elements[range.first];
   const collapsed = range.first === range.last && range.start.offset === range.end.offset;
+  // Typing inside an automatically closed parenthetical leaves the caret just
+  // before its closing bracket; Return there still advances to Dialogue.
+  const parentheticalEnd = el.type === 'parenthetical' && el.text.endsWith(')')
+    && range.start.offset === el.text.length - 1;
+  const smartReturn = command.type === 'enter' && (!collapsed
+    || (range.start.offset > 0 && range.start.offset < el.text.length && !parentheticalEnd));
   switch (command.type) {
     case 'rightMargin': {
       if (!command.reset && ![5,-5].includes(command.delta)) throw new TypeError('Margins change by exactly five points.');
@@ -252,6 +258,23 @@ export function editDocument(document, selection, command) {
       if (command.text) next = correctWord(doc, next);
       break;
     case 'enter': {
+      if (smartReturn) {
+        const last = range.elements[range.last];
+        const enclosed = el === last && el.type === 'parenthetical' && /^\([\s\S]*\)$/.test(el.text);
+        const before = el.text.slice(0, enclosed ? Math.max(1, range.start.offset) : range.start.offset);
+        const text = last.text.slice(enclosed ? Math.min(range.end.offset, last.text.length - 1) : range.end.offset, enclosed ? -1 : undefined);
+        const type = classifyReturnFragment(text, { originalType: last.type, before,
+          previous: range.elements[range.first - 1], following: range.elements[range.last + 1],
+          characters: doc.elements.filter(item => item.type === 'character').map(item => item.text) });
+        const added = createElement(type, text);
+        if (type === last.type && last.rightMarginOffsetPt) added.rightMarginOffsetPt = last.rightMarginOffsetPt;
+        const begin = doc.elements.indexOf(el), end = doc.elements.indexOf(last);
+        el.text = before + (enclosed ? ')' : '');
+        doc.elements.splice(begin + 1, end - begin);
+        insertAfter(doc, el, added);
+        next = caret(added.id);
+        break;
+      }
       const recognized = recognizeCharacter(doc, el, next);
       el = recognized.el; next = recognized.selection;
       if (collapsed && next.focus.offset === el.text.length) next = correctWord(doc, next, true);
@@ -357,7 +380,9 @@ export function editDocument(document, selection, command) {
   }
   if (command.type === 'insert') next = recognizeTypedScene(doc, next, document, selection);
   if (command.type === 'insert') next = recognizeTypedTransition(doc, next);
-  finishTyping(doc, next, document);
+  // Splitting is structural, never typing: do not uppercase/correct fragments or
+  // manufacture parentheses in either surviving half.
+  if (!smartReturn) finishTyping(doc, next, document);
   if (command.type === 'insert' && !command.text) next = clearEmptyParenthetical(doc, next);
   if (screenplaySettings(doc).sceneNumbers) redoSceneNumbers(doc);
   const dual = dualElementIds(doc);

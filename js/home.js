@@ -56,7 +56,9 @@ function render() {
       try {
         const latest = await repository.get(record.id);
         if (!latest || latest.deletedAt) throw new Error('This screenplay is no longer in the library.');
-        await fileService.download(fountainForSaving(latest.recovery.document), fountainFilename(latest.title));
+        let warning;
+        await fileService.download(fountainForSaving(latest.recovery.document, { onWarning: text => { warning = text; } }), fountainFilename(latest.title));
+        if (warning) error(warning);
       } catch (failure) { error(`Could not export: ${failure.message}`); }
     });
     deleteButton.addEventListener('click', () => {

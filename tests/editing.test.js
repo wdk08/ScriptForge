@@ -169,13 +169,14 @@ test('spoken prefixes and manual Action overrides do not get reclassified unexpe
   assert.equal(editDocument(forcedAction, caret(forcedAction.elements[0].id, 4), { type: 'insert', text: ' ROOM' }).document.elements[0].type, 'action');
 });
 
-test('Tab and non-Action Enter preserve filled lines across screenplay types', () => {
+test('Tab preserves filled lines while Return replaces the selection and splits every type', () => {
   for (const type of ['action', 'scene', 'character', 'dialogue', 'parenthetical', 'transition']) {
     const doc = docWith(type, type === 'parenthetical' ? '(quietly)' : 'Filled line');
     const id = doc.elements[0].id;
     for (const command of [{ type: 'enter' }, { type: 'tab' }, { type: 'tab', reverse: true }]) {
       const result = editDocument(doc, { anchor: { id, offset: 1 }, focus: { id, offset: 3 } }, command);
-      if (type === 'action' && command.type === 'enter') assert.deepEqual(editableElements(result.document).map(e => e.text), ['F','led line']);
+      if (command.type === 'enter') assert.deepEqual(editableElements(result.document).map(e => e.text), type === 'parenthetical'
+        ? ['()',doc.elements[0].text.slice(3,-1)] : [doc.elements[0].text.slice(0,1),doc.elements[0].text.slice(3)]);
       else assert.deepEqual(result.document.elements[0], doc.elements[0]);
       assert.equal(editableElements(result.document).length, 2);
       assert.notEqual(result.selection.focus.id, id);
@@ -255,12 +256,12 @@ test('Enter recognizes only an exact previously speaking character and starts di
   assert.equal(editDocument(cueOnly, caret(el.id, 4), { type: 'enter' }).document.elements.find(item => item.id === el.id).type, 'action');
 });
 
-test('a known name on a manual action line becomes a cue without losing surrounding action', () => {
+test('Return inside a multiline Action preserves its type and exact text; end-of-element autocorrect remains', () => {
   const doc = parseFountain('NOAH\nHello.\n\n!The room is still.\nnoah\nThe light flickers.');
   const el = editableElements(doc).at(-1);
   const result = editDocument(doc, caret(el.id, 'The room is still.\nnoah'.length), { type: 'enter' });
-  assert.deepEqual(editableElements(result.document).slice(-4).map(el => [el.type, el.text]), [
-    ['action', 'The room is still.'], ['character', 'NOAH'], ['dialogue', ''], ['action', 'The light flickers.']
+  assert.deepEqual(editableElements(result.document).slice(-2).map(el => [el.type, el.text]), [
+    ['action', 'The room is still.\nnoah'], ['action', '\nThe light flickers.']
   ]);
   const typo = docWith('action', 'Teh'), id = typo.elements[0].id;
   assert.equal(editDocument(typo, caret(id, 3), { type: 'enter' }).document.elements[0].text, 'The');

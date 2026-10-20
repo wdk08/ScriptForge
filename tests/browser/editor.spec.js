@@ -297,7 +297,7 @@ test('typing lowercase scene prefixes formats immediately and preserves the care
   }
 });
 
-test('character Tab creates a parenthetical below; filled lines remain intact and Enter leaves dialogue for action', async ({ page }) => {
+test('character Tab creates a parenthetical below; Tab leaves filled lines intact and end Return leaves dialogue for action', async ({ page }) => {
   const char = (await getElements(page)).find(el => el.type === 'character');
   const active = () => page.evaluate(() => {
     const selection = window.scriptForge.getSelection().focus;
@@ -316,7 +316,7 @@ test('character Tab creates a parenthetical below; filled lines remain intact an
   await page.keyboard.press('Tab');
   expect(await active()).toMatchObject({ type: 'dialogue', text: '', offset: 0 });
   await page.keyboard.type('A spoken line.'); const speech = await active();
-  await select(page, speech.id, 2); await page.keyboard.press('Enter');
+  await select(page, speech.id, speech.text.length); await page.keyboard.press('Enter');
   expect(await active()).toMatchObject({ type: 'action', text: '', offset: 0 });
   expect((await getElements(page)).find(el => el.id === speech.id).text).toBe('A spoken line.');
   const action = await active(); await page.keyboard.press('Tab');

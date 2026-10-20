@@ -10,7 +10,9 @@ export function documentFingerprint(doc) {
   // Keep the legacy fingerprint byte-for-byte when no override exists.
   return JSON.stringify({ title: doc.title, elements: meaningfulContent(doc), whitespace: doc.elements.filter(el => el.type === 'whitespace').map(el => el.text), ...(overrides.length ? { continuations: overrides } : {}), ...(margins.length ? { margins } : {}) });
 }
-export function fountainForSaving(document) {
+export const FOUNTAIN_LAYOUT_WARNING = 'Fountain saved literal text for temporary formatting that Fountain cannot represent. A Fountain-only round trip may change element types. Exact text and types remain in editor recovery.';
+
+export function fountainForSaving(document, { onWarning = () => {} } = {}) {
   const doc = structuredClone(document);
   // Fountain is a portable presentation, not ScriptForge's internal JSON format.
   const continuations = automaticContinuations(document);
@@ -28,6 +30,22 @@ export function fountainForSaving(document) {
   // normalize only this export copy, leaving editor text and caret untouched.
   for (const el of doc.elements) if (el.type === 'scene') el.text = el.text.trim().toUpperCase();
   doc.elements = doc.elements.filter(el => el.type === 'scene' ? Boolean(el.text) : el.text || !draftingTypes.includes(el.type) || el.sceneNumber);
+  let speech = false, projected = false;
+  for (const el of doc.elements) {
+    if (el.type === 'whitespace') continue;
+    const orphan = ['dialogue','parenthetical'].includes(el.type) && !speech;
+    const incomplete = el.type === 'parenthetical' && !/^\([^\n]*\)$/.test(el.text);
+    const trimmed = ['character','transition','parenthetical','centered','section','synopsis'].includes(el.type)
+      && el.text.trim() !== el.text;
+    const invalidScene = el.type === 'scene' && !/^[\p{L}\p{N}]/u.test(el.text);
+    if (orphan || incomplete || trimmed || invalidScene) {
+      el.type = 'action'; delete el.dual; delete el.continuation; delete el.sceneNumber; delete el.depth; delete el.rightMarginOffsetPt;
+      projected = true;
+    }
+    if (el.type === 'character') speech = true;
+    else if (!['dialogue','parenthetical','lyric','note','boneyard'].includes(el.type)) speech = false;
+  }
+  if (projected) onWarning(FOUNTAIN_LAYOUT_WARNING);
   if (!doc.source || explicitStructure) return serializeFountain(doc, { canonical: true });
   // Preserve exact imported spelling whenever the arrangement still permits it.
   try { return serializeFountain(doc); } catch { return serializeFountain(doc, { canonical: true }); }
@@ -62,6 +80,7 @@ export class DocumentSession {
     this.selection = record.recovery.selection; this.onState = onState; this.delay = delay;
     this.generation = 0; this.persistedGeneration = -1; this.queue = Promise.resolve();
     this.storageError = null; this.fileError = null; this.missingFile = false; this.autoFile = false; this.busy = false;
+    this.fountainWarnings = Array.isArray(record.fountainWarnings) ? record.fountainWarnings.filter(warning => typeof warning === 'string') : [];
     this.recovered = Boolean(record.recovery.dirty && record.savedFingerprint);
     this.automatic = automatic; this.fileDelay = fileDelay; this.autoPaused = false;
     this.autoFile = automatic && Boolean(record.handle || record.folderPending) && !this.recovered;
@@ -172,9 +191,11 @@ export class DocumentSession {
     this.busy = true; this.fileError = null; this.emit();
     try {
       if (!directory) throw new Error('Choose your Screenplay Folder to save this draft to disk.');
-      const source = fountainForSaving(snapshot);
+      this.fountainWarnings = [];
+      const source = fountainForSaving(snapshot, { onWarning: warning => this.fountainWarnings.push(warning) });
       const result = await this.files.createInFolder(directory, source, snapshot.title, this.record.id);
       this.record = { ...this.record, handle: result.handle, fileName: result.name, cachedSource: source,
+        fountainWarnings: [...this.fountainWarnings],
         fileHash: result.hash, savedFingerprint: documentFingerprint(snapshot), savedAt: Date.now(),
         folderPending: false, folderSaveError: null, downloadOnly: false, fileDirectory: directory, fileTitle: fountainFilename(snapshot.title) };
       this.recovered = false;
@@ -238,7 +259,8 @@ export class DocumentSession {
         }
       }
       if (this.record.pendingRenames?.length) await this.performRenameCleanup();
-      const source = fountainForSaving(snapshot);
+      this.fountainWarnings = [];
+      const source = fountainForSaving(snapshot, { onWarning: warning => this.fountainWarnings.push(warning) });
       let directory = this.record.fileDirectory;
       // Recover ownership metadata for folder files created by earlier versions.
       const suffix = ` - ${this.record.id}`;
@@ -271,6 +293,7 @@ export class DocumentSession {
       } else result = handle ? await this.files.write(handle, source, { expectedHash: overrideHash ?? this.record.fileHash, allowNewDestination: newDestination })
         : this.files.download(source, fountainFilename(snapshot.title));
       this.record = { ...this.record, handle: handle ?? null, fileName: result.name, cachedSource: source,
+        fountainWarnings: [...this.fountainWarnings],
         fileHash: result.hash, savedFingerprint: documentFingerprint(snapshot), savedAt: Date.now(), downloadOnly: !handle,
         folderPending: false, folderSaveError: null, ...(directory ? { fileDirectory: directory, fileTitle: fountainFilename(snapshot.title) } : {}),
         pendingRenames: oldFile ? [...(this.record.pendingRenames ?? []), oldFile] : this.record.pendingRenames ?? [] };

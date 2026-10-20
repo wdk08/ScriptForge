@@ -12,6 +12,9 @@ const windows = process.platform === 'win32';
 if (!windows && process.platform !== 'darwin') throw new Error('Installed update testing supports macOS and Windows.');
 if (windows && !(process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' && process.env.GITHUB_REPOSITORY === 'wdk08/ScriptForge')) throw new Error('Windows installer tests require a disposable GitHub-hosted ScriptForge runner; never run against an existing personal installation.');
 const source = process.cwd(), bundle = resolve(process.argv[2] ?? 'src-tauri/target/release/bundle');
+const toVersion = JSON.parse(await readFile('package.json')).version;
+const fromVersion = '1.0.0';
+if (toVersion === fromVersion) throw new Error('Installed update validation requires a newer candidate than the published baseline.');
 const target = process.argv[3];
 const find = async directory => (await Promise.all((await readdir(directory, { withFileTypes: true })).map(entry => entry.isDirectory() ? find(join(directory, entry.name)) : [join(directory, entry.name)]))).flat();
 const archives = (await find(bundle)).filter(path => path.endsWith(windows ? '.exe' : '.app.tar.gz'));
@@ -22,8 +25,9 @@ const archive = archives[0], signature = await readFile(`${archive}.sig`, 'utf8'
 const root = await realpath(await mkdtemp(join(tmpdir(), 'scriptforge-desktop-smoke-')));
 console.log(`Installed update evidence: ${root}`);
 const tree = join(root, 'source'); await mkdir(tree);
-const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
-for (const file of tracked) { await mkdir(dirname(join(tree, file)), { recursive: true }); await cp(join(source, file), join(tree, file)); }
+// Rebuild the actual published baseline source, not the candidate with an older
+// version label. Only isolated diagnostics/endpoint configuration is patched.
+execFileSync('tar', ['-xf', '-', '-C', tree], { input: execFileSync('git', ['archive', `v${fromVersion}`], { maxBuffer: 256 * 1024 * 1024 }) });
 await symlink(resolve('node_modules'), join(tree, 'node_modules'), windows ? 'junction' : 'dir');
 const replaceOnce = async (file, before, after) => {
   const text = await readFile(join(tree, file), 'utf8');
@@ -31,9 +35,9 @@ const replaceOnce = async (file, before, after) => {
   await writeFile(join(tree, file), text.replace(before, after));
 };
 // Only this disposable older test build may check for updates in diagnostics.
-// The production source/build and downloaded 1.0.0 archive remain unmodified.
+// The candidate production source/build and signed archive remain unmodified.
 await replaceOnce('src-tauri/src/updates.rs', 'std::env::var_os("SCRIPTFORGE_DESKTOP_SMOKE_ROOT").is_none()\n        && ', '');
-await writeFile(join(root, 'stress.js'), await readFile('scripts/installed-update-proof.js'));
+await writeFile(join(root, 'stress.js'), `window.scriptForgeUpdateProofVersions = ${JSON.stringify({ from: fromVersion, to: toVersion })};\n` + await readFile('scripts/installed-update-proof.js', 'utf8'));
 const payload = await readFile(archive);
 const openssl = windows ? join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git/usr/bin/openssl.exe') : 'openssl';
 execFileSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(root, 'tls.key'), '-out', join(root, 'tls.crt'), '-days', '1', '-subj', '/CN=localhost'], { stdio: 'ignore' });
@@ -59,8 +63,8 @@ $result = [UIntPtr]::Zero
 `], { env: { ...process.env, SCRIPTFORGE_DESKTOP_SMOKE_ROOT: root }, stdio: 'pipe' });
 try {
   const endpoint = `https://127.0.0.1:${server.address().port}`;
-  manifest = { version: '1.0.0', notes: 'Isolated installed-app update proof', pub_date: new Date().toISOString(), platforms: { [windows ? 'windows-x86_64' : `darwin-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}`]: { url: `${endpoint}/payload`, signature } } };
-  const config = { version: '0.99.0', bundle: { createUpdaterArtifacts: false }, plugins: { updater: { endpoints: [`${endpoint}/latest.json`], dangerousAcceptInvalidCerts: true } } };
+  manifest = { version: toVersion, notes: 'Isolated installed-app update proof', pub_date: new Date().toISOString(), platforms: { [windows ? 'windows-x86_64' : `darwin-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}`]: { url: `${endpoint}/payload`, signature } } };
+  const config = { version: fromVersion, bundle: { createUpdaterArtifacts: false }, plugins: { updater: { endpoints: [`${endpoint}/latest.json`], dangerousAcceptInvalidCerts: true } } };
   await writeFile(join(tree, 'update-test.json'), JSON.stringify(config));
   const targetRoot = resolve(process.env.SCRIPTFORGE_UPDATE_TEST_TARGET_ROOT ?? 'src-tauri/target');
   const args = ['build', '--config', 'update-test.json', '--bundles', windows ? 'nsis' : 'app', ...(target ? ['--target', target] : [])];
@@ -75,7 +79,7 @@ try {
   await mkdir(dirname(installed), { recursive: true });
   if (windows) {
     diagnosticEnvironment(true); windowsEnvironment = true;
-    const installers = (await find(join(bundleOutput, 'nsis'))).filter(path => path.endsWith('.exe') && basename(path).includes('0.99.0'));
+    const installers = (await find(join(bundleOutput, 'nsis'))).filter(path => path.endsWith('.exe') && basename(path).includes(fromVersion));
     if (installers.length !== 1) throw new Error('Exactly one older test installer is required.');
     execFileSync(installers[0], ['/S', '/NS', `/D=${installed}`], { stdio: 'pipe', timeout: 120000 });
   } else await cp(join(bundleOutput, 'macos/ScriptForge.app'), installed, { recursive: true });

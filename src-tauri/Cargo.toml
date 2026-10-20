@@ -1,6 +1,6 @@
 [package]
 name = "scriptforge"
-version = "1.0.0"
+version = "1.0.1"
 description = "ScriptForge local screenplay editor"
 authors = ["wdk08"]
 license = "GPL-3.0-only"

@@ -410,8 +410,9 @@ $('new-document').addEventListener('click', async () => {
 async function exportFountain() {
   try {
     const doc = history.current.document;
-    await fileService.download(fountainForSaving(doc), fountainFilename(doc.title)); closeMenu(); document.querySelector('.export-menu').open = false;
-    notify('Fountain copy exported. Autosave continues updating your linked file.');
+    let warning;
+    await fileService.download(fountainForSaving(doc, { onWarning: text => { warning = text; } }), fountainFilename(doc.title)); closeMenu(); document.querySelector('.export-menu').open = false;
+    notify(warning || 'Fountain copy exported. Autosave continues updating your linked file.');
   } catch (error) { notify(`Export stopped: ${error.message}`); }
 }
 $('export-fountain').addEventListener('click', exportFountain);
@@ -471,6 +472,7 @@ function updateFileState() {
   else if (session.fileError) message = `File save stopped. ${session.fileError.message}`;
   else if (fileAccessError) message = `Showing the cached copy. ${fileAccessError.message} Your local file has not been changed.`;
   else if (session.recovered) message = 'Recovered unsaved changes. Your original file is unchanged; Continuing to edit resumes autosaving to the same file.';
+  else if (session.fountainWarnings.length) message = session.fountainWarnings.join(' ');
   else if (session.record.fileReferenceWarning && !session.record.handle) message = session.record.fileReferenceWarning;
   else if (!session.record.fileName) message = 'This draft has browser recovery. Choose Screenplay Folder to enable automatic disk saving.';
   else if (!session.record.handle) message = fileService.supportsSavePicker

@@ -1,13 +1,14 @@
 // Injected only into isolated native diagnostics, never ordinary application launches.
 (async () => {
   const invoke = window.__TAURI__.core.invoke, checks = [];
+  const { from, to } = window.scriptForgeUpdateProofVersions;
   const assert = (value, message) => { if (!value) throw new Error(message); checks.push(message); };
   const wait = async test => { const end = Date.now() + 120000; let lastError; while (true) { try { if (await test()) return; } catch (error) { lastError = error; } const updateError = document.querySelector('#scriptforge-update [data-error]')?.textContent; if (updateError) throw new Error(updateError); if (Date.now() > end) throw new Error(`Installed update UI timed out${lastError ? `: ${lastError}` : ''}`); await new Promise(resolve => setTimeout(resolve, 50)); } };
   try {
     const info = await invoke('desktop_diagnostics'), app = await invoke('desktop_app_info');
     const { fileService: files } = await import('/js/files.js');
     const directory = files.restoreHandle(info.directory);
-    if (app.version === '0.99.0' && !location.pathname.endsWith('editor.html')) {
+    if (app.version === from && !location.pathname.endsWith('editor.html')) {
       const { parseFountain } = await import('/js/fountain.js');
       const { repository } = await import('/js/storage.js');
       const { DocumentSession, draftRecord } = await import('/js/session.js');
@@ -25,7 +26,7 @@
     const checkpointHandle = await directory.getFileHandle('Update checkpoint.fountain');
     const checkpointFile = await files.read(checkpointHandle);
     let checkpoint = JSON.parse(checkpointFile.source);
-    if (app.version === '0.99.0') {
+    if (app.version === from) {
       await wait(() => window.scriptForge?.getDocument() && document.getElementById('pages').contentEditable === 'true');
       await (await import('/js/updates.js')).setupUpdates(window);
       const root = document.getElementById('pages');
@@ -45,7 +46,7 @@
       await wait(() => document.getElementById('about-scriptforge').open);
       document.querySelector('[data-about-check]').click();
       await wait(() => document.querySelector('#scriptforge-update [data-primary]')?.textContent === 'Update Now');
-      assert(document.querySelector('#scriptforge-update [data-summary]').textContent.includes('1.0.0'), 'About manual checking detects the signed newer version');
+      assert(document.querySelector('#scriptforge-update [data-summary]').textContent.includes(to), 'About manual checking detects the signed newer version');
       document.querySelector('#scriptforge-update [data-primary]').click();
       await wait(() => document.querySelector('#scriptforge-update h1')?.textContent === (app.platform === 'windows' ? 'Update Ready to Install' : 'Update Ready'));
       if (app.platform === 'windows') assert(document.querySelector('#scriptforge-update [data-primary]').textContent === 'Install and Restart', 'Windows verifies the download and waits for explicit installation');
@@ -58,7 +59,7 @@
       await wait(() => document.querySelector('#scriptforge-update [data-primary]')?.textContent === (app.platform === 'windows' ? 'Install and Restart' : 'Restart Now'));
       document.querySelector('#scriptforge-update [data-primary]').click(); return;
     }
-    assert(app.version === '1.0.0', 'the replaced installed application relaunches as version 1.0.0');
+    assert(app.version === to, `the replaced installed application relaunches as version ${to}`);
     checks.unshift(...checkpoint.checks);
     // Each diagnostic process has its own default database prefix. Inspect the old
     // process's explicitly recorded test database, never a real user database.
@@ -76,7 +77,7 @@
     assert(await folder.queryPermission({ mode: 'readwrite' }) === 'granted', 'native folder grants survive the update');
     const { BackupService } = await import('/js/backups.js');
     assert((await new BackupService().list(checkpoint.id)).length > 0, 'native backup history survives the update');
-    await invoke('desktop_diagnostics_report', { report: { success: true, installedAndRestarted: true, from: '0.99.0', to: app.version, checks } });
+    await invoke('desktop_diagnostics_report', { report: { success: true, installedAndRestarted: true, from, to: app.version, checks } });
   } catch (error) {
     await invoke('desktop_diagnostics_report', { report: { success: false, error: String(error), stack: error.stack, checks } });
   }

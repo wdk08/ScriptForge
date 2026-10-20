@@ -219,14 +219,32 @@ test('saving a scene after Fade In tolerates in-progress heading whitespace with
   }
 });
 
-test('an edited imported heading saves its final whitespace safely, but unrepresentable arrangements remain protected', () => {
+test('an edited heading saves safely, and orphan speech exports literally with an explicit type warning', () => {
   const doc = parseFountain('>FADE IN:\n\n.INT. ROOM - DAY\n\n!A quiet room.\n');
   doc.elements.find(el => el.type === 'scene').text += ' ';
   const snapshot = structuredClone(doc);
   assert.equal(parseFountain(fountainForSaving(doc)).elements.find(el => el.type === 'scene').text, 'INT. ROOM - DAY');
   assert.deepEqual(doc, snapshot);
   const invalid = createDocument({ elements: [createElement('dialogue', 'Orphan speech without a character.')] });
-  assert.throws(() => fountainForSaving(invalid), /without changing its meaning/);
+  const warnings = [], before = structuredClone(invalid);
+  const source = fountainForSaving(invalid, { onWarning: warning => warnings.push(warning) });
+  assert.equal(parseFountain(source).elements.find(el => el.type === 'action').text, invalid.elements[0].text);
+  assert.match(warnings[0], /round trip may change element types/);
+  assert.deepEqual(invalid, before);
+});
+
+test('autosave writes temporary orphan speech literally, warns, and retains exact types and caret in recovery', async () => {
+  const {store,fs,session}=await setup();
+  const doc=structuredClone(session.document);
+  doc.elements=[createElement('character','NOAH'),createElement('action','An interruption.'),createElement('dialogue','Exact speech — café!')];
+  const selection={anchor:{id:doc.elements[2].id,offset:0},focus:{id:doc.elements[2].id,offset:0}};
+  session.autoFile=true;session.changed(doc,selection);await session.flush();
+  assert.equal(fs.state.writes,1);assert.equal(session.fileError,null);assert.equal(session.autoFile,true);
+  assert.match(session.fountainWarnings[0],/round trip may change element types/);
+  assert.ok(fs.state.source.includes('Exact speech — café!'));
+  const saved=await store.get(session.record.id);
+  assert.deepEqual(saved.recovery.document,doc);assert.deepEqual(saved.recovery.selection,selection);
+  assert.deepEqual(session.document,doc);session.dispose();
 });
 
 test('duplicate recovery flushes skip extra commits but successful disk writes still persist their hash and clean state', async () => {
