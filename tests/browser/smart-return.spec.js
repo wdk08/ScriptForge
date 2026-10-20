@@ -73,3 +73,14 @@ test('export warns explicitly for orphan speech and leaves the live document unc
  await page.locator('.export-menu summary').click();const download=page.waitForEvent('download');await page.locator('#export-fountain').click();await download;
  await expect(page.locator('#notice')).toContainText('Fountain-only round trip');expect(await doc(page)).toEqual(after);
 });
+
+test('Character to Dialogue preserves its leading space and exports safely with a warning and exact recovery',async({page})=>{
+ const id=await seed(page,[['character','BOB HELLO.']]);const before=await doc(page);
+ await select(page,before.elements[0].id,3);await page.keyboard.press('Enter');const after=await doc(page);
+ const elements=after.elements.filter(e=>e.type!=='whitespace');expect(elements.map(e=>[e.type,e.text])).toEqual([['character','BOB'],['dialogue',' HELLO.']]);
+ await page.locator('.export-menu summary').click();const pending=page.waitForEvent('download');await page.locator('#export-fountain').click();await pending;
+ await expect(page.locator('#notice')).toContainText('Fountain-only round trip');expect(await doc(page)).toEqual(after);
+ await page.evaluate(()=>window.scriptForgeBeforeClose());
+ const saved=await page.evaluate(async id=>(await(await import('/js/storage.js')).repository.get(id)).recovery,id);
+ expect(saved.document).toEqual(after);expect(saved.selection.focus).toEqual({id:elements[1].id,offset:0});
+});

@@ -35,15 +35,17 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
     if (el.type === 'whitespace') continue;
     const orphan = ['dialogue','parenthetical'].includes(el.type) && !speech;
     const incomplete = el.type === 'parenthetical' && !/^\([^\n]*\)$/.test(el.text);
-    const trimmed = ['character','transition','parenthetical','centered','section','synopsis'].includes(el.type)
-      && el.text.trim() !== el.text;
+    const trimmed = el.type === 'character' ? el.text.trimEnd() !== el.text
+      : ['transition','parenthetical','centered','section','synopsis'].includes(el.type) && el.text.trim() !== el.text;
+    const dialogueSpace = el.type === 'dialogue' && el.text.split('\n').some(line =>
+      line.trim() ? line.trimStart() !== line : line === '  ');
     const invalidScene = el.type === 'scene' && !/^[\p{L}\p{N}]/u.test(el.text);
     const singleLine = ['scene','character','transition','centered','lyric','section','synopsis'].includes(el.type) && el.text.includes('\n');
     const hiddenDelimiter = (el.type === 'note' && (el.text.includes(']]') || el.text.endsWith(']')))
       || (el.type === 'boneyard' && el.text.includes('*/'));
     const speechSyntax = el.type === 'dialogue' && el.text.split('\n').some(line =>
       /^(?:[!@>~=]|\.[\p{L}\p{N}]|#+(?:\s|$)|\(.*\)$|\[\[.*\]\]$|\/\*.*\*\/$)/u.test(line.trim()));
-    if (orphan || incomplete || trimmed || invalidScene || singleLine || hiddenDelimiter || speechSyntax) {
+    if (orphan || incomplete || trimmed || dialogueSpace || invalidScene || singleLine || hiddenDelimiter || speechSyntax) {
       el.type = 'action'; delete el.dual; delete el.continuation; delete el.sceneNumber; delete el.depth; delete el.rightMarginOffsetPt;
       projected = true;
     }
@@ -54,7 +56,7 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
   // Keep its literal text, using separate explicit Action blocks only in the
   // export copy when one multiline block cannot express those boundaries.
   doc.elements = doc.elements.flatMap(el => {
-    if (el.type !== 'action' || !el.text.split('\n').slice(1).some(line => /^[.!@>~#=]/.test(line.trimStart()))) return [el];
+    if (el.type !== 'action' || !el.text.split('\n').slice(1).some(line => line === '  ' || /^[.!@>~#=]/.test(line.trimStart()))) return [el];
     projected = true;
     return el.text.split('\n').map(text => createElement('action', text));
   });

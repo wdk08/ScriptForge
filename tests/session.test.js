@@ -233,6 +233,12 @@ test('an edited heading saves safely, and orphan speech exports literally with a
   assert.deepEqual(invalid, before);
 });
 
+test('valid leading spaces in forced Character cues retain their existing Fountain type without a warning', () => {
+  const doc=createDocument({elements:[createElement('character',' BOB')]}),warnings=[];
+  const parsed=parseFountain(fountainForSaving(doc,{onWarning:w=>warnings.push(w)}));
+  assert.equal(parsed.elements.find(el=>el.type==='character').text,' BOB');assert.deepEqual(warnings,[]);
+});
+
 test('autosave writes temporary orphan speech literally, warns, and retains exact types and caret in recovery', async () => {
   const {store,fs,session}=await setup();
   const doc=structuredClone(session.document);
