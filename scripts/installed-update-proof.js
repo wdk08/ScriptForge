@@ -26,6 +26,7 @@
     let checkpoint = JSON.parse((await files.read(checkpointHandle)).source);
     if (app.version === '0.99.0') {
       await wait(() => window.scriptForge?.getDocument() && document.getElementById('pages').contentEditable === 'true');
+      await (await import('/js/updates.js')).setupUpdates(window);
       const root = document.getElementById('pages');
       const { restoreSelection } = await import('/js/selection.js');
       const type = text => {
