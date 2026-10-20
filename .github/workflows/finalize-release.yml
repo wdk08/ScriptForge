@@ -1,0 +1,85 @@
+name: Resume verified release publication
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: 'Completed Official release run whose review, source and all builds passed'
+        required: true
+        type: string
+      commit:
+        description: 'Exact already validated app commit and existing draft target'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type ScriptForge v1.0.0 to publish the existing verified draft'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: scriptforge-official-release
+  cancel-in-progress: false
+jobs:
+  finish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'wdk08/ScriptForge'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: wdk08/ScriptForge
+      RELEASE_VERSION: 1.0.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require the exact validated existing draft and all successful build jobs
+        id: gate
+        uses: actions/github-script@v7
+        env:
+          BUILD_RUN: ${{ inputs.build_run }}
+          APP_COMMIT: ${{ inputs.commit }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        with:
+          script: |
+            const sha=process.env.APP_COMMIT, runId=process.env.BUILD_RUN;
+            if(!/^[a-f0-9]{40}$/.test(sha)||!/^\d+$/.test(runId)||process.env.CONFIRMATION!=='ScriptForge v1.0.0')throw new Error('Invalid reviewed release inputs.');
+            const {data:workflow}=await github.rest.actions.getWorkflow({...context.repo,workflow_id:'release.yml'});
+            const {data:run}=await github.rest.actions.getWorkflowRun({...context.repo,run_id:Number(runId)});
+            if(run.workflow_id!==workflow.id||run.head_sha!==sha||run.head_branch!=='main'||run.event!=='workflow_dispatch'||run.status!=='completed')throw new Error('Original release run does not match the reviewed app commit.');
+            const jobs=await github.paginate(github.rest.actions.listJobsForWorkflowRun,{...context.repo,run_id:Number(runId),filter:'latest',per_page:100});
+            const required=['review','draft','source','build (macos-15, aarch64-apple-darwin, arm64, dmg,app)','build (macos-15-intel, x86_64-apple-darwin, x86_64, dmg,app)','build (windows-latest, x86_64-pc-windows-msvc, nsis)'];
+            for(const name of required)if(!jobs.some(j=>j.name===name&&j.conclusion==='success'))throw new Error(`Required original job did not pass: ${name}`);
+            if(jobs.some(j=>j.name!=='finish'&&j.conclusion!=='success'))throw new Error('An original prerequisite failed.');
+            const validations=await github.paginate(github.rest.actions.listWorkflowRuns,{...context.repo,workflow_id:'validate-desktop.yml',status:'completed',event:'workflow_dispatch',per_page:100});
+            if(!validations.some(r=>r.head_sha===sha&&r.head_branch==='main'&&r.conclusion==='success'))throw new Error('Exact-commit installed-update acceptance missing.');
+            const {data:release}=await github.rest.repos.getReleaseByTag({...context.repo,tag:'v1.0.0'});
+            if(!release.draft||release.prerelease||release.target_commitish!==sha||release.name!=='ScriptForge v1.0.0')throw new Error('Existing draft target/state does not match; never recreate or overwrite a release.');
+            core.setOutput('release_id',String(release.id));
+            core.info(`Continuing existing draft ${release.id}; binaries/source remain from ${sha}. Original builds: ${run.html_url}`);
+      - name: Validate corresponding source, checksums and all signed updater references
+        env:
+          RELEASE_ID: ${{ steps.gate.outputs.release_id }}
+        run: |
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --slurp | jq 'add' > release-assets.json
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          const assets=JSON.parse(readFileSync('release-assets.json'));
+          for(const name of ['ScriptForge-1.0.0-source.tar.gz','ScriptForge-1.0.0-source.tar.gz.sha256'])if(!assets.some(a=>a.name===name&&a.size>0))throw new Error('Matching corresponding source is missing.');
+          if(assets.filter(a=>a.name.endsWith('.dmg')).length!==2||assets.filter(a=>a.name.endsWith('.app.tar.gz')).length!==2||assets.filter(a=>a.name.endsWith('.exe')).length!==1)throw new Error('Expected installer set missing.');
+          JS
+          gh release download v1.0.0 --pattern '*.dmg' --pattern '*.app.tar.gz' --pattern '*.exe' --dir release-review/installers
+          node scripts/artifact-checksums.mjs release-review/installers --upload v1.0.0
+          gh release download v1.0.0 --pattern latest.json --dir release-review
+          node scripts/validate-update-manifest.mjs release-review/latest.json release-assets.json
+      - name: Publish the existing verified release
+        run: gh release edit v1.0.0 --draft=false --latest
+      - name: Verify public discovery and updater downloads
+        run: |
+          curl --fail --retry 4 --retry-delay 5 --location 'https://github.com/wdk08/ScriptForge/releases/latest/download/latest.json' --output public-latest.json
+          node scripts/validate-update-manifest.mjs public-latest.json release-assets.json --public

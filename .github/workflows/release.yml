@@ -242,7 +242,7 @@ jobs:
           node-version: '22'
       - name: Validate all three platform signatures and asset references before publication
         run: |
-          gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --slurp --jq 'add' > release-assets.json
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --slurp | jq 'add' > release-assets.json
           node --input-type=module <<'JS'
           import {readFileSync} from 'node:fs';
           const assets=JSON.parse(readFileSync('release-assets.json'));
