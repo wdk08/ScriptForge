@@ -41,7 +41,9 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
     const singleLine = ['scene','character','transition','centered','lyric','section','synopsis'].includes(el.type) && el.text.includes('\n');
     const hiddenDelimiter = (el.type === 'note' && (el.text.includes(']]') || el.text.endsWith(']')))
       || (el.type === 'boneyard' && el.text.includes('*/'));
-    if (orphan || incomplete || trimmed || invalidScene || singleLine || hiddenDelimiter) {
+    const speechSyntax = el.type === 'dialogue' && el.text.split('\n').some(line =>
+      /^(?:[!@>~=]|\.[\p{L}\p{N}]|#+(?:\s|$)|\(.*\)$|\[\[.*\]\]$|\/\*.*\*\/$)/u.test(line.trim()));
+    if (orphan || incomplete || trimmed || invalidScene || singleLine || hiddenDelimiter || speechSyntax) {
       el.type = 'action'; delete el.dual; delete el.continuation; delete el.sceneNumber; delete el.depth; delete el.rightMarginOffsetPt;
       projected = true;
     }
