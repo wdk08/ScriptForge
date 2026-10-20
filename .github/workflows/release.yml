@@ -170,6 +170,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: desktop-${{ matrix.target }}
+          cache-on-failure: true
+          cache-bin: false
       - run: npm ci
       - name: Require updater signing credentials
         env:

@@ -72,7 +72,7 @@ try {
   });
   const bundleOutput = join(targetRoot, ...(target ? [target] : []), 'release/bundle');
   const installed = join(root, 'installed', ...(windows ? [] : ['ScriptForge.app']));
-  await mkdir(dirname(installed));
+  await mkdir(dirname(installed), { recursive: true });
   if (windows) {
     diagnosticEnvironment(true); windowsEnvironment = true;
     const installers = (await find(join(bundleOutput, 'nsis'))).filter(path => path.endsWith('.exe') && basename(path).includes('0.99.0'));
