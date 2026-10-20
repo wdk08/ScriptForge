@@ -130,8 +130,11 @@ jobs:
           retention-days: 14
           compression-level: 0
           if-no-files-found: error
+      - name: Real installed-app update and restart using signed production bytes
+        if: runner.os == 'macOS'
+        run: node scripts/test-installed-update.mjs src-tauri/target/${{ matrix.target }}/release/bundle ${{ matrix.target }}
       - name: Record validation limits
         if: always()
         shell: bash
         run: |
-          echo 'Validation artifacts only; no GitHub Release, tag, source push or publication performed by this workflow. Tauri updater signatures are distinct from publisher signing. Browser-quarantined installation and real installed-app updating still require separate tests. See INSTALLING.md and docs/PLATFORM-VALIDATION.md.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Validation artifacts only; no GitHub Release, tag, source push or publication performed by this workflow. Mac installed-update proof is a required step, not a compilation claim. Windows installed updating and Internet-quarantined installation remain separate manual tests. See INSTALLING.md and docs/PLATFORM-VALIDATION.md.' >> "$GITHUB_STEP_SUMMARY"

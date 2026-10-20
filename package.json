@@ -16,7 +16,7 @@
     "build:desktop": "node scripts/build-desktop.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build --config src-tauri/tauri.local.conf.json",
-    "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "desktop:test": "node scripts/build-desktop.mjs && cargo test --manifest-path src-tauri/Cargo.toml",
     "desktop:smoke": "node scripts/smoke-desktop.mjs",
     "desktop:stress": "node scripts/stress-desktop.mjs",
     "release:check": "node scripts/release-check.mjs",
