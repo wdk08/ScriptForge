@@ -54,6 +54,10 @@ jobs:
           npx playwright install --with-deps chromium
           node scripts/probe-browser-fonts.mjs
           npx playwright test --workers=2 --config=playwright.ci.config.js
+      - name: Production browser edition regression checks
+        run: |
+          npm run build:web
+          npm run test:web -- --workers=2
       - run: npm run release:source
       - name: Retain corresponding source for the matching validation installers
         uses: actions/upload-artifact@v4

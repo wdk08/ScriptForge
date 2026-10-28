@@ -54,6 +54,30 @@ async function probeAttachment(github, repo, release, version, suffix) {
     headers:{'content-type':'text/plain','content-length':data.length}});
   await github.rest.repos.deleteReleaseAsset({...repo, asset_id:asset.id});
 }
+async function probeTagPermissions(github, repo, commit, suffix) {
+  if (!/^[a-f0-9]{40}$/.test(commit) || !/^[0-9]+-[0-9]+$/.test(suffix)) throw new Error('Invalid tag probe identity.');
+  const ref = `tags/scriptforge-release-preflight-${suffix}`;
+  await github.rest.git.createRef({...repo, ref:`refs/${ref}`, sha:commit});
+  try {
+    const {data} = await github.rest.git.getRef({...repo, ref});
+    if (data.object.sha !== commit) throw new Error('Tag permission probe commit mismatch.');
+  } finally { await github.rest.git.deleteRef({...repo, ref}); }
+}
+async function publishDraft(github, repo, {id, version, commit}) {
+  const {data:release} = await github.rest.repos.getRelease({...repo, release_id:Number(id)});
+  assertDraft(release, version, commit);
+  const tag = `v${version}`;
+  let ref;
+  try { ({data:ref} = await github.rest.git.getRef({...repo, ref:`tags/${tag}`})); }
+  catch (error) { if (error.status !== 404) throw error; }
+  if (ref && (ref.object.type !== 'commit' || ref.object.sha !== commit)) throw new Error('Existing tag does not match the validated commit.');
+  if (!ref) await github.rest.git.createRef({...repo, ref:`refs/tags/${tag}`, sha:commit});
+  const {data:verified} = await github.rest.git.getRef({...repo, ref:`tags/${tag}`});
+  if (verified.object.sha !== commit || verified.object.type !== 'commit') throw new Error('Final tag readback mismatch.');
+  await github.rest.repos.updateRelease({...repo, release_id:release.id, tag_name:tag, target_commitish:commit, draft:false, prerelease:false, make_latest:'true'});
+  const {data:published} = await github.rest.repos.getRelease({...repo, release_id:release.id});
+  if (published.draft || published.prerelease || published.tag_name !== tag || published.target_commitish !== commit) throw new Error('Publication readback mismatch.');
+}
 function verifyRun(run, jobs, workflowId, commit) {
   if (run.workflow_id !== workflowId || run.head_sha !== commit || run.head_branch !== 'main' || run.event !== 'workflow_dispatch' || run.status !== 'completed') throw new Error('Artifact run does not match the exact reviewed app commit/workflow.');
   for (const name of ['validation / source','review',
@@ -67,4 +91,4 @@ function verifyRun(run, jobs, workflowId, commit) {
     }
   }
 }
-module.exports = {assertDraft, ensureDraft, uploadFiles, probeAttachment, verifyRun};
+module.exports = {assertDraft, ensureDraft, uploadFiles, probeAttachment, probeTagPermissions, publishDraft, verifyRun};

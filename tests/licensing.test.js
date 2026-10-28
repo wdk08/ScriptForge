@@ -26,7 +26,7 @@ test('source archives exclude private storage, secrets, traversal and build outp
  for(const path of ['LICENSE','js/editor.js','tests/fixtures/complex.fountain','third-party/piper-source/espeak-ng.tar.gz','.env.example'])assert.equal(sourcePathAllowed(path),true,path);
 });
 test('release workflow gates installers on matching corresponding-source upload',async()=>{
- const source=await readFile('.github/workflows/release.yml','utf8');assert.match(source,/needs: \[draft, source\]/);assert.match(source,/npm run release:source/);assert.match(source,/Corresponding-source asset missing; refusing publication/);
+ const source=await readFile('.github/workflows/release.yml','utf8');assert.match(source,/needs: \[draft, source\]/);assert.match(source,/name: corresponding-source/);assert.match(source,/plan.source/);assert.match(source,/Missing\/extra release assets/);assert.match(await readFile('.github/workflows/validate-desktop.yml','utf8'),/npm run release:source/);
 });
 test('source snapshot verification rejects changed or private content before packaging',async()=>{
  const root=await mkdtemp(join(tmpdir(),'scriptforge-source-verification-'));

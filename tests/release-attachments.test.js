@@ -115,3 +115,31 @@ test('retry reuses only identical uploaded bytes and replaces only latest.json m
  const latest=join(dir,'latest.json');await writeFile(latest,'new metadata');m.github.paginate=async()=>[{...existing,name:'latest.json'}];
  await api.uploadFiles(m.github,repo,{id:42,version:'1.0.1',commit,files:[latest],reuse:true,replaceMetadata:true});assert.deepEqual(m.calls.map(c=>c[0]),['delete','upload']);
 });
+
+test('tag permission probe cleans up only its temporary ref and fails before expensive validation',async()=>{
+ const calls=[],git={createRef:async a=>calls.push(['create',a]),getRef:async()=>({data:{object:{sha:commit,type:'commit'}}}),deleteRef:async a=>calls.push(['delete',a])};
+ await api.probeTagPermissions({rest:{git}},repo,commit,'123-1');
+ assert.equal(calls[0][1].ref,'refs/tags/scriptforge-release-preflight-123-1');
+ assert.equal(calls[1][1].ref,'tags/scriptforge-release-preflight-123-1');
+ git.createRef=async()=>{throw Object.assign(Error('forbidden'),{status:403})};
+ await assert.rejects(api.probeTagPermissions({rest:{git}},repo,commit,'123-2'),/forbidden/);
+ assert.equal(calls.length,2);
+});
+test('publication explicitly binds the final tag to the verified commit and refuses mismatched tags',async()=>{
+ const m=mock();let ref;const calls=[];
+ m.github.rest.git={getRef:async()=>{if(!ref)throw Object.assign(Error('missing'),{status:404});return {data:ref}},createRef:async a=>{calls.push(a);ref={object:{sha:a.sha,type:'commit'}}}};
+ await api.publishDraft(m.github,repo,{id:42,version:'1.0.1',commit});
+ assert.equal(calls[0].ref,'refs/tags/v1.0.1');assert.equal(calls[0].sha,commit);
+ assert.equal(m.calls.at(-1)[1].make_latest,'true');
+ const wrong=mock();wrong.github.rest.git.getRef=async()=>({data:{object:{sha:'b'.repeat(40),type:'commit'}}});
+ await assert.rejects(api.publishDraft(wrong.github,repo,{id:42,version:'1.0.1',commit}),/Existing tag/);assert.deepEqual(wrong.calls,[]);
+});
+test('official release publishes same-run installed-update tested bytes without a second native build',async()=>{
+ const yaml=await readFile('.github/workflows/release.yml','utf8');
+ assert.match(yaml,/api\.probeTagPermissions/);assert.match(yaml,/\.publishDraft\(github/);
+ const attachment=yaml.slice(yaml.indexOf('  build:\n'),yaml.indexOf('  finish:\n'));
+ assert.match(attachment,/pattern: installers-\*/);assert.match(attachment,/name: corresponding-source/);
+ assert.match(attachment,/prepare-verified-release\.mjs/);assert.doesNotMatch(attachment,/tauri-action|tauri build|matrix:/);
+ assert.match(attachment,/matches\[0\]\.digest!==digest/);
+ assert.match(await readFile('scripts/test-installed-update.mjs','utf8'),/const fromVersion = '1\.0\.1'/);
+});

@@ -42,6 +42,6 @@ export async function prepareArtifacts(input,output,{version,commit,notes}){
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
  const version=process.env.RELEASE_VERSION,commit=process.env.APP_COMMIT;
- if(version!=='1.0.1'||commit!=='a25cc9dcc89a8acf0301fa303a324e94a3413942')throw new Error('This recovery is restricted to the already validated v1.0.1 commit.');
- console.log(await prepareArtifacts(resolve(process.argv[2]),resolve(process.argv[3]),{version,commit,notes:await readFile('releases/v1.0.1.md','utf8')}));
+ if(!/^\d+\.\d+\.\d+$/.test(version)||!/^[a-f0-9]{40}$/.test(commit)||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()!==commit||JSON.parse(await readFile('package.json','utf8')).version!==version)throw new Error('Artifacts must match this exact release checkout and version.');
+ console.log(await prepareArtifacts(resolve(process.argv[2]),resolve(process.argv[3]),{version,commit,notes:await readFile(`releases/v${version}.md`,'utf8')}));
 }

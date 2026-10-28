@@ -13,7 +13,7 @@ if (!windows && process.platform !== 'darwin') throw new Error('Installed update
 if (windows && !(process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' && process.env.GITHUB_REPOSITORY === 'wdk08/ScriptForge')) throw new Error('Windows installer tests require a disposable GitHub-hosted ScriptForge runner; never run against an existing personal installation.');
 const source = process.cwd(), bundle = resolve(process.argv[2] ?? 'src-tauri/target/release/bundle');
 const toVersion = JSON.parse(await readFile('package.json')).version;
-const fromVersion = '1.0.0';
+const fromVersion = '1.0.1';
 if (toVersion === fromVersion) throw new Error('Installed update validation requires a newer candidate than the published baseline.');
 const target = process.argv[3];
 const find = async directory => (await Promise.all((await readdir(directory, { withFileTypes: true })).map(entry => entry.isDirectory() ? find(join(directory, entry.name)) : [join(directory, entry.name)]))).flat();
