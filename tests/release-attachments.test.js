@@ -136,7 +136,7 @@ test('publication explicitly binds the final tag to the verified commit and refu
 });
 test('official release publishes same-run installed-update tested bytes without a second native build',async()=>{
  const yaml=await readFile('.github/workflows/release.yml','utf8');
- assert.match(yaml,/api\.probeTagPermissions/);assert.match(yaml,/\.publishDraft\(github/);
+ assert.match(yaml,/api\.probeTagPermissions/);assert.match(yaml,/process.env.GITHUB_RUN_ATTEMPT/);assert.doesNotMatch(yaml,/context.runAttempt/);assert.match(yaml,/\.publishDraft\(github/);
  const attachment=yaml.slice(yaml.indexOf('  build:\n'),yaml.indexOf('  finish:\n'));
  assert.match(attachment,/pattern: installers-\*/);assert.match(attachment,/name: corresponding-source/);
  assert.match(attachment,/prepare-verified-release\.mjs/);assert.doesNotMatch(attachment,/tauri-action|tauri build|matrix:/);

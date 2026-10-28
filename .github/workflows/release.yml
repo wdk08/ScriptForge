@@ -63,8 +63,8 @@ jobs:
             if (process.env.PUBLISH === 'true' && process.env.CONFIRMATION !== `ScriptForge v${version}`) throw new Error('Publication confirmation mismatch.');
             const api = require('./scripts/release-attachments.cjs');
             const release = await api.ensureDraft(github, context.repo, {version,commit,refresh:process.env.REFRESH === 'true',body:fs.readFileSync(`releases/v${version}.md`,'utf8')});
-            await api.probeTagPermissions(github, context.repo, commit, `${context.runId}-${context.runAttempt}`);
-            await api.probeAttachment(github, context.repo, release, version, `${context.runId}-${context.runAttempt}`);
+            await api.probeTagPermissions(github, context.repo, commit, `${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`);
+            await api.probeAttachment(github, context.repo, release, version, `${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`);
   validation:
     needs: preflight
     if: github.ref == 'refs/heads/main' && github.repository == 'wdk08/ScriptForge'
