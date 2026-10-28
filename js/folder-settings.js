@@ -22,7 +22,7 @@ export function setupFolderSetting(button, { onChange = () => {} } = {}) {
     choose.disabled = !fileService.supportsDirectories;
     grant.hidden = !directory || !fileService.supportsDirectories;
     status.textContent = !fileService.supportsDirectories
-      ? 'This browser does not support directory access. Open ScriptForge at http://localhost:4173 with its local helper running for folder autosaving in Safari. Recovery still saves in this browser; Export downloads a copy.'
+      ? (globalThis.scriptForgeLocalHelperDisabled || location.protocol === 'https:' ? 'This browser does not support directory access. Recovery stays in this browser; Export downloads a separate Fountain backup. Use the desktop app for automatic folder saving.' : 'This browser does not support directory access. Open ScriptForge at http://localhost:4173 with its local helper running for folder autosaving in Safari. Recovery still saves in this browser; Export downloads a copy.')
       : directory ? `Selected folder: ${directory.name}${fileService.usesDesktop ? ' · native desktop saving' : fileService.usesLocalHelper ? ' · local saving helper' : ''}. Use Allow folder access if permission expires; you do not need to select it again.`
       : 'No folder selected. Until you choose one, drafts use browser recovery; Export downloads a copy.';
   }

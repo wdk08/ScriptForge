@@ -78,3 +78,10 @@ ScriptForge is Copyright (C) 2026 wdk08 and free software under **GPL version 3 
 Piper and Table Reads remain available. The speech runtime is rebuilt from pinned, included Piper/eSpeak sources. Third-party code retains its notices, and unmodified Courier Prime fonts remain OFL-1.1. No voice weights are bundled. Every official binary release must include its matching source archive and retained dependencies/build instructions. See [licensing review](docs/LICENSING-REVIEW.md).
 
 Release publication is manual and approval controlled. See [RELEASING.md](RELEASING.md) and [release readiness](docs/RELEASE-READINESS.md).
+
+## Browser app and Writing Statistics (1.1)
+
+The same editor can be built as a static app: `npm run build:web`, then
+`npm run preview:web` and open http://localhost:4174/ScriptForge/.
+See [browser hosting and writing statistics](docs/BROWSER-AND-WRITING.md) for
+local storage/backup limitations, metric definitions and manual Pages deployment.

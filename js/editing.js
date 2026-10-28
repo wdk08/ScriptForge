@@ -1,3 +1,4 @@
+import { cueIdentity, extendedCue } from './character-cues.js';
 import { rightMarginBounds } from './right-margins.js';
 import { dualElementIds } from './document.js';
 import { toggleContinuation } from './continuations.js';
@@ -98,14 +99,14 @@ function correctWord(doc, next, completed = false) {
 
 function recognizeCharacter(doc, el, selection) {
   if (el.type !== 'action' || selection.focus.id !== el.id) return { el, selection };
-  const key = text => text.replace(/\s*\([^)]*\)\s*$/, '').trim().toUpperCase();
+  const key = cueIdentity;
   const line = lineAt(el.text, selection.focus.offset);
   const name = line.text.trim().toUpperCase();
   if (!name) return { el, selection };
   const index = doc.elements.indexOf(el);
   const known = dialogueGroups(doc).some(group => doc.elements.indexOf(group.character) < index
-    && key(group.character.text) === name && group.elements.some(item => item.type === 'dialogue' && item.text.trim()));
-  if (!known) return { el, selection };
+    && key(group.character.text) === key(name) && group.elements.some(item => item.type === 'dialogue' && item.text.trim()));
+  if (!known && !extendedCue(line.text)) return { el, selection };
   const prefix = el.text.slice(0, line.start).replace(/\n$/, '');
   const suffix = el.text.slice(line.end).replace(/^\n/, '');
   let cue = el;

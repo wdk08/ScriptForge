@@ -1,3 +1,4 @@
+import { cueIdentity, extendedCue } from './character-cues.js';
 import { createElement } from './document.js';
 import { parseFountain } from './fountain.js';
 import { hasScenePrefix, sceneLocation } from './scene-locations.js';
@@ -15,7 +16,7 @@ function cue(text) {
 /** Keep all supplied physical line boundaries; never turn PDF lines into spaces. */
 export const normalizeScreenplayClipboard = text => text.replace(/\r\n|\r|\u2028/g, '\n').replace(/\u2029/g, '\n\n').replace(/\n?\f\n?/g, '\n');
 const indentation = text => [...(text.match(/^[ \t\u00a0]*/) ?? [''])[0]].reduce((width, char) => width + (char === '\t' ? 4 - width % 4 : 1), 0);
-const cueName = text => text.replace(/^@/, '').replace(/\s*\^$/, '').replace(/(?:\s*\([^()]*\))+\s*$/, '').trim().toUpperCase();
+const cueName = cueIdentity;
 const narrativeVerbs = 'sits|stands|looks|walks|runs|enters|exits|leaves|turns|steps|moves|opens|closes|pulls|pushes|reaches|takes|puts|picks|sets|drops|falls|rises|nods|shakes|smiles|frowns|stares|glances|watches|waits|pauses|hesitates|grabs|holds|hands|crosses|leans|kneels|sighs|shrugs|gestures|points|approaches|stops|starts|drives|follows|backs|sinks|slams|flickers|flashes|rings|rolls|fades|begins|continues';
 const narrativeLine = new RegExp(`^([\\p{L}\\p{M}][\\p{L}\\p{M}'’.-]*(?:[ \\t]+[\\p{L}\\p{M}][\\p{L}\\p{M}'’.-]*){0,4})[ \\t]+(${narrativeVerbs})\\b`, 'iu');
 function narrative(text, names) {
@@ -35,7 +36,7 @@ export function classifyScreenplayLine(text, { inDialogue = false, allowCue = fa
     || Boolean(sceneLocation(candidate.replace(/\s+#[\w.-]+#\s*$/, ''))?.qualifier))
     || /^\.[\p{L}\p{N}]/u.test(candidate)) return 'scene';
   if ((allowTransition && isCommonTransition(candidate)) || /^>[^<]+$/.test(candidate)) return 'transition';
-  if (allowCue && (cue(candidate) || (names.has(cueName(candidate)) && cue(candidate.toUpperCase())))
+  if (allowCue && (cue(candidate) || extendedCue(candidate) || (names.has(cueName(candidate)) && cue(candidate.toUpperCase())))
     && !narrative(candidate, names)) return 'character';
   if (allowParenthetical && /^\([^\n]*\)$/.test(candidate)) return 'parenthetical';
   return fallback;
@@ -93,7 +94,7 @@ export function screenplayPaste(text) {
     }
     const previous = (lines[i - 1]?.text ?? '');
     const forcedCue = candidate.startsWith('@');
-    const cueFollowedBySpeech = cue(candidate) && !narrative(candidate, names) && next && !hasScenePrefix(next) && (forcedCue || !cue(next) || (pdfLayout && indent >= currentBase + 6 && lines[n].indent < indent - 3 && lines[n].indent > currentBase + 2))
+    const cueFollowedBySpeech = (cue(candidate) || extendedCue(candidate)) && !narrative(candidate, names) && next && !hasScenePrefix(next) && (forcedCue || !cue(next) || (pdfLayout && indent >= currentBase + 6 && lines[n].indent < indent - 3 && lines[n].indent > currentBase + 2))
       && (!isCommonTransition(next) || next !== next.toUpperCase());
     const cueColumn = !pdfLayout || forcedCue || candidate !== trimmed || indent >= currentBase + 6 || columnNames.has(cueName(candidate));
     const cueSpacing = n === i + 1 || forcedCue || (pdfLayout && indent >= currentBase + 6 && lines[n]?.indent > currentBase + 2);

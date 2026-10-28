@@ -1,8 +1,13 @@
 export function desktopInvoke(environment = globalThis) {
-  const invoke = environment.__TAURI__?.core?.invoke;
+  const core = environment.__TAURI__?.core;
+  if (typeof core?.isTauri === 'function' && !core.isTauri()) return null;
+  const invoke = core?.invoke;
   return typeof invoke === 'function' ? invoke : null;
 }
-export const isDesktop = () => Boolean(desktopInvoke());
+export const isDesktop = (environment = globalThis) => {
+  const check = environment.__TAURI__?.core?.isTauri;
+  return typeof check === 'function' ? Boolean(check()) : Boolean(desktopInvoke(environment));
+};
 export async function invokeDesktop(command, args = {}, environment = globalThis) {
   const invoke = desktopInvoke(environment);
   if (!invoke) throw new Error('The native desktop runtime is unavailable.');

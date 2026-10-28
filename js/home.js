@@ -1,3 +1,4 @@
+import {setupWritingStatistics} from './writing-statistics.js';
 import { backups } from './backups.js';
 import { setupVoiceLibrary } from './voice-library.js';
 import { repository } from './storage.js';
@@ -179,3 +180,5 @@ $('search').value = '';
 await refreshLibrary();
 
 setupVoiceLibrary();
+
+setupWritingStatistics({button: document.getElementById('writing-statistics')});

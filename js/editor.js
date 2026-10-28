@@ -1,3 +1,5 @@
+import {createWritingController} from './writing-controller.js';
+import {setupWritingStatistics} from './writing-statistics.js';
 import { flushForUpdate } from './update-safety.js';
 import { setupEditorFeatures } from './editor-features.js';
 import { setupActiveElement } from './active-element.js';
@@ -36,6 +38,15 @@ const folderSettings = setupFolderSetting($('screenplay-folder'), { onChange: as
   } catch (error) { notify(`Not saved to disk: ${error.message}`); updateFileState(); }
 } });
 const root = $('pages');
+const writing = createWritingController({error: failure => notify(`Writing statistics: ${failure.message}`)});
+let statisticsKind = 'layout', statisticsDetails = {};
+setupWritingStatistics({button: $('writing-statistics'), controller: writing, onClear: () => history && writing.open(history.current.document, pageLayout.length)});
+for (const event of ['pointerdown','keydown','wheel']) root.addEventListener(event, () => writing.interact(), {passive:true});
+document.addEventListener('pointerdown', event => { if (!root.contains(event.target)) writing.suspend(); }, {passive:true});
+window.addEventListener('blur', () => writing.suspend());
+window.addEventListener('focus', () => { if(root.contains(document.activeElement) && !document.querySelector('dialog[open]')) writing.interact(); });
+window.addEventListener('pagehide', () => writing.abandon());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') writing.suspend(); });
 const activeElement = setupActiveElement(root);
 const formatShortcuts = { 1: 'scene', 2: 'action', 3: 'character', 4: 'parenthetical', 5: 'dialogue', 6: 'transition' };
 for (const [key, type] of Object.entries(formatShortcuts)) {
@@ -124,6 +135,7 @@ function load(doc, record) {
   document.body.classList.remove('loading-editor');
   root.contentEditable = 'true';
   render(false);
+  void writing.open(doc, pageLayout.length);
   updateFileState();
   features?.loaded();
   window.history.replaceState(null, '', `./editor.html?id=${encodeURIComponent(record.id)}`);
@@ -196,6 +208,8 @@ function render(focus = true) {
     nextCounts.set(el.id,{text:el.text,count}); words += count;
   }
   wordCounts = nextCounts;
+  void writing.observe(doc, pageLayout.length, statisticsKind, statisticsDetails);
+  statisticsKind = 'layout'; statisticsDetails = {};
   $('document-stats').textContent = `${pageLayout.length} ${pageLayout.length === 1 ? 'page' : 'pages'}  ·  ${words.toLocaleString()} words`;
   updateFileState();
   if (focus) restoreSelection(root, currentSelection);
@@ -217,6 +231,9 @@ function apply(command, selection = readSelection(root) ?? currentSelection) {
   }
   preferredX = null;
   try {
+    statisticsKind = command.statisticsKind ?? command.type;
+    const element = history.current.document.elements.find(el => el.id === selection.anchor.id);
+    statisticsDetails = {text: command.type === 'insert' ? command.text : '', prefix: element?.text.slice(0, selection.anchor.offset) ?? ''};
     const state = history.apply(selection, command);
     currentSelection = state.selection; dirty = true;
     session.changed(state.document, currentSelection);
@@ -225,6 +242,7 @@ function apply(command, selection = readSelection(root) ?? currentSelection) {
 }
 function undo(redo = false) {
   if (editingLocked) return;
+  statisticsKind = redo ? 'redo' : 'undo';
   const state = redo ? history.redo() : history.undo();
   const titleFocused = document.activeElement?.matches('[data-title-field], #document-title');
   currentSelection = state.selection; dirty = true; render(false); if (!titleFocused) { restoreSelection(root, currentSelection, { scroll: true }); activeElement.update(); }
@@ -370,7 +388,7 @@ root.addEventListener('copy', event => {
 root.addEventListener('cut', event => {
   const selection = readSelection(root) ?? currentSelection;
   event.preventDefault(); event.clipboardData.setData('text/plain', selectedText(history.current.document, selection));
-  apply({ type: 'insert', text: '' }, selection);
+  apply({ type: 'insert', text: '', statisticsKind: 'cut' }, selection);
 });
 root.addEventListener('drop', event => {
   event.preventDefault();
@@ -396,6 +414,7 @@ $('document-title').addEventListener('input', event => {
   if (!history) return;
   const state = history.apply(currentSelection, { type: 'titlePage', field: 'title', value: event.target.value });
   session.changed(state.document, currentSelection); dirty = true;
+  void writing.observe(state.document, pageLayout.length, 'title');
   features?.update(); titlePage.update(state.document); $('workspace-title').textContent = state.document.title.toUpperCase(); updateTools();
 });
 $('document-title').addEventListener('keydown', event => {
@@ -403,7 +422,7 @@ $('document-title').addEventListener('keydown', event => {
 });
 $('new-document').addEventListener('click', async () => {
   try {
-    await session?.flush(); await folderSettings.beforeCreate(); const record = await createAutoSavedDraft({ deferDisk: true }); fileAccessError = null;
+    await session?.flush(); await writing.pause(); await folderSettings.beforeCreate(); const record = await createAutoSavedDraft({ deferDisk: true }); fileAccessError = null;
     load(record.recovery.document, record); closeMenu(); render();
   } catch (error) { notify(`Could not start a new screenplay: ${error.message}`); }
 });
@@ -456,12 +475,12 @@ function updateFileState() {
   dirty = session.dirty;
   const pending = !session.recoveryCurrent;
   $('disk-save-state').textContent = session.busy ? 'Saving…' : session.fileError || fileAccessError ? 'Save failed'
-    : session.record.pendingRenames?.length ? 'Saving…' : dirty ? 'Unsaved changes' : session.record.handle ? 'Saved' : session.record.savedAt ? 'Copy downloaded' : 'Unsaved changes';
+    : session.record.pendingRenames?.length ? 'Saving…' : dirty ? 'Unsaved changes' : session.record.handle ? 'Saved' : session.record.savedAt ? 'Copy downloaded' : session.recoveryCurrent ? 'Recovery saved' : 'Saving recovery…';
   $('save-state').textContent = session.busy ? 'Saving Fountain file…'
     : session.storageError ? 'Recovery unavailable · save a Fountain copy'
     : fileAccessError ? 'Cached copy · local file access unavailable'
     : dirty ? `${session.record.fileName ? 'Unsaved file changes' : 'Draft · no Fountain file yet'} · ${pending ? 'saving recovery…' : 'recovery saved'}`
-    : `${session.record.handle ? `Saved to ${session.record.fileName}` : fileService.supportsSavePicker ? 'File copy · choose Screenplay Folder' : 'File copy · downloads for saving'} · ${pending ? 'saving recovery…' : 'recovery saved'}`;
+    : `${session.record.handle ? `Saved to ${session.record.fileName}` : fileService.supportsSavePicker ? 'File copy · choose Screenplay Folder' : 'Browser recovery · Export creates a separate file'} · ${pending ? 'saving recovery…' : 'recovery saved'}`;
   $('save').disabled = ioBusy || session.busy;
   $('file-autosave').checked = true;
   $('file-autosave').disabled = true;
@@ -474,7 +493,7 @@ function updateFileState() {
   else if (session.recovered) message = 'Recovered unsaved changes. Your original file is unchanged; Continuing to edit resumes autosaving to the same file.';
   else if (session.fountainWarnings.length) message = session.fountainWarnings.join(' ');
   else if (session.record.fileReferenceWarning && !session.record.handle) message = session.record.fileReferenceWarning;
-  else if (!session.record.fileName) message = 'This draft has browser recovery. Choose Screenplay Folder to enable automatic disk saving.';
+  else if (!session.record.fileName) message = fileService.supportsDirectories ? 'Browser recovery is saved locally. Choose Screenplay Folder for automatic disk saving.' : 'Browser recovery is local to this browser. Use Export to keep a separate Fountain backup. Clearing website data can erase recovery.';
   else if (!session.record.handle) message = fileService.supportsSavePicker
     ? 'This is a browser copy. Choose Screenplay Folder for automatic disk saving, or Export a copy.'
     : 'This is a browser copy. This browser cannot save to a local folder automatically. Recovery is active; Export downloads a copy.';
@@ -567,7 +586,7 @@ $('conflict-close').addEventListener('click', () => $('file-conflict-dialog').cl
 $('conflict-copy').addEventListener('click', () => { $('file-conflict-dialog').close(); exportFountain(); });
 $('conflict-overwrite').addEventListener('click', () => { $('file-conflict-dialog').close(); saveDocument(false, reviewedHash); });
 async function toLibrary() {
-  try { await session?.flush(); allowLeave = true; location.href = './index.html'; }
+  try { await session?.flush(); await writing.pause(); allowLeave = true; location.href = './index.html'; }
   catch (error) { notify(`Your current text is still here. Save a copy before leaving: ${error.message}`); }
 }
 $('home').addEventListener('click', event => { event.preventDefault(); toLibrary(); });
@@ -578,7 +597,7 @@ async function openFile(importCopy = false) {
   ioBusy = true;
   try {
     const opened = await fileService.open({ importCopy });
-    await session?.flush();
+    await session?.flush(); await writing.pause();
     const record = await importOpenedFile(opened); allowLeave = true;
     location.href = `./editor.html?id=${encodeURIComponent(record.id)}`;
   } catch (error) { if (error.name !== 'AbortError') notify(error.message); }
@@ -624,7 +643,7 @@ function savePendingRecovery() {
     session.flush().catch(() => {}).finally(() => { leavingRecovery = false; });
   }
 }
-window.addEventListener('pageshow', () => { allowLeave = false; leavingRecovery = false; });
+window.addEventListener('pageshow', event => { allowLeave = false; leavingRecovery = false; if(event.persisted && history) void writing.open(history.current.document,pageLayout.length); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') savePendingRecovery(); });
 window.addEventListener('pagehide', savePendingRecovery);
 window.addEventListener('pagehide', () => { session?.dispose(); clearTimeout(renderTimer); clearTimeout(noticeTimer); });
@@ -719,7 +738,7 @@ window.scriptForgePrepareUpdate = async () => {
   try { await flushForUpdate({session,repository,backups}); return release; }
   catch(error) { release(); throw error; }
 };
-window.scriptForgeBeforeClose = async () => { await session?.flush(); await backups.queue; };
+window.scriptForgeBeforeClose = async () => { await session?.flush(); await backups.queue; await writing.pause(); };
 await initialize();
 
 setupCharacterRename({ launcher: $('rename-character'), getDocument: () => composition ? null : history?.current.document, onReturn: () => { if (history) restoreSelection(root, currentSelection); }, onRename: async command => {

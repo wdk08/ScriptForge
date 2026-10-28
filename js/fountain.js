@@ -1,3 +1,4 @@
+import { extendedCue } from './character-cues.js';
 import { createDocument, createElement, meaningfulContent, validateDocument } from './document.js';
 import { isCommonTransition } from './transitions.js';
 export { parseInline } from './inline.js';
@@ -26,7 +27,7 @@ function hiddenRanges(source, diagnostics) {
 
 function characterName(text) {
   const name = text.replace(/\s*\^$/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
-  return /\p{L}/u.test(name) && name === name.toUpperCase() && name !== name.toLowerCase();
+  return extendedCue(text) || /\p{L}/u.test(name) && name === name.toUpperCase() && name !== name.toLowerCase();
 }
 
 /** Tolerant parsing: unknown or malformed syntax remains Action, never discarded. */

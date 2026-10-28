@@ -1,0 +1,2 @@
+import {defineConfig} from '@playwright/test';
+export default defineConfig({testDir:'./tests/web',outputDir:'./test-results/web',fullyParallel:false,use:{baseURL:'http://localhost:4174/ScriptForge/',channel:process.env.SCRIPTFORGE_TEST_BROWSER??'chromium',launchOptions:{args:['--font-render-hinting=none']},viewport:{width:1440,height:1000}},webServer:{command:'npm run preview:web',url:'http://localhost:4174/ScriptForge/',reuseExistingServer:false}});

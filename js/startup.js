@@ -1,7 +1,9 @@
+import {setupBrowserFeatures} from './browser-features.js';
 import { setupDesktopLifecycle } from './desktop.js';
 // Keep navigation and an actionable error available even if an app module fails.
 const entry = document.querySelector('script[data-entry]').dataset.entry;
 try {
+  setupBrowserFeatures();
   await setupDesktopLifecycle();
   await import(entry === 'editor' ? './editor.js' : './home.js');
   // Update initialization is independent of screenplay startup and never awaited here.

@@ -1,6 +1,6 @@
 {
   "name": "scriptforge",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Local screenplay editor for macOS, Windows, and the browser",
@@ -26,7 +26,10 @@
     "licenses:check": "node scripts/license-inventory.mjs",
     "build:piper": "node scripts/build-piper.mjs",
     "release:source": "node scripts/source-release.mjs",
-    "audit:history": "node scripts/audit-release-history.mjs"
+    "audit:history": "node scripts/audit-release-history.mjs",
+    "build:web": "node scripts/build-web.mjs",
+    "preview:web": "node scripts/preview-web.mjs",
+    "test:web": "playwright test --config=playwright.web.config.js"
   },
   "engines": {
     "node": ">=20"

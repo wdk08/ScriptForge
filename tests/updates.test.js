@@ -1,3 +1,4 @@
+import {readFile} from 'node:fs/promises';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {UpdateController} from '../js/updates.js';import {flushForUpdate} from '../js/update-safety.js';
 import {releaseCheck,validPublicKey} from '../scripts/release-check.mjs';import {validateManifest,platforms} from '../scripts/validate-update-manifest.mjs';
@@ -25,7 +26,7 @@ test('save barrier verifies exact recovery, and blocks swallowed disk failures a
  await assert.rejects(flushForUpdate({...deps,repository:{get:async()=>({recovery:{document:{...document,settings:{}}}})}}));
  await flushForUpdate({...deps,session:{...session,record:{id:'test',handle:null},dirty:true}}); // Verified recovery protects drafts without a disk file.
 });
-test('release versions and real public key configuration validate; requested mismatches fail',async()=>{assert.equal(await releaseCheck({production:true}),'1.0.1');await assert.rejects(releaseCheck({version:'1.0.0'}));assert.equal(validPublicKey('not a key'),false);});
+test('release versions and real public key configuration validate; requested mismatches fail',async()=>{assert.equal(await releaseCheck({production:true}),JSON.parse(await readFile(new URL('../package.json',import.meta.url))).version);await assert.rejects(releaseCheck({version:'1.0.0'}));assert.equal(validPublicKey('not a key'),false);});
 test('manifest requires every target, signed version, HTTPS and actual uploaded artifacts',()=>{
  const signature=Buffer.from('untrusted comment: fixture\nfixture\ntrusted comment: timestamp:1\tversion:1.0.0\nfixture').toString('base64');const assets=platforms.map((p,i)=>({id:i+1,size:100,name:p.startsWith('darwin')?`${p}.app.tar.gz`:`${p}.exe`,browser_download_url:`https://github.com/wdk08/ScriptForge/releases/download/v1.0.0/${p}`}));const manifest={version:'1.0.0',notes:'Notes',pub_date:'2026-10-19T00:00:00Z',platforms:Object.fromEntries(platforms.map((p,i)=>[p,{signature,url:assets[i].browser_download_url}]))};assert.equal(validateManifest(manifest,'1.0.0',assets),true);
  for(const mutate of [m=>delete m.platforms['windows-x86_64'],m=>m.platforms['darwin-aarch64'].url='http://example.invalid/a',m=>m.platforms['darwin-aarch64'].signature='',m=>m.version='2.0.0']){const invalid=structuredClone(manifest);mutate(invalid);assert.throws(()=>validateManifest(invalid,'1.0.0',assets));}
