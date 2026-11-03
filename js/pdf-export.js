@@ -117,8 +117,8 @@ export async function createScreenplayPDF(document) {
         if (model.type === 'transition' && !transitionClass(model)) { align = 'right'; x += width; }
         if (model.type === 'centered' || model.type === 'titleField') { align = 'center'; x += width / 2; }
         if (model.type === 'scene' && doc.settings?.sceneNumbers === true && line.start === 0 && model.sceneNumber) {
-          draw(model.sceneNumber, FORMAT.sceneNumberLeft * scale, textY, { baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
-          draw(model.sceneNumber, FORMAT.sceneNumberRight * scale, textY, { align: 'right', baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
+          draw(model.sceneNumber, FORMAT.sceneNumberLeft * scale, textY, { bold, baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
+          draw(model.sceneNumber, FORMAT.sceneNumberRight * scale, textY, { bold, align: 'right', baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
         }
         if (text) draw(text, x * scale, textY, { align, baseline: 'alphabetic', bold, family:unicode?'unicode':'courier', tracking:FORMAT.letterSpacing*scale });
       }));
