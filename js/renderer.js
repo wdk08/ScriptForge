@@ -1,3 +1,4 @@
+import { applyScreenplayFont } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
 import { CLASS_NAMES, PAGE } from './pagination.js';
 import { transitionClass } from './transitions.js';
@@ -21,6 +22,7 @@ function renderColumn(lines, byId, dual, settings) {
       fragment.style.fontWeight = settings?.boldSceneHeadings === true ? '700' : '400';
       if (settings?.sceneNumbers === true && group.start === 0 && model.sceneNumber) fragment.dataset.sceneNumber = model.sceneNumber;
     }
+    applyScreenplayFont(fragment, model.text, group.type === 'scene' && settings?.boldSceneHeadings === true);
     fragment.style.width = `${elementLayout(model, dual, 0, settings).width}px`;
     fragment.dataset.elementId = group.id;
     fragment.dataset.start = group.start;
@@ -59,7 +61,7 @@ function renderPage(page, index, byId, doc) {
         const marker = (text, type, offset = 0) => {
           const label = document.createElement('div');
           label.className = `screenplay-element character continuation ${type} ${item.kind === 'dual' ? 'dual-cue-marker' : ''}`;
-          label.contentEditable = 'false'; label.textContent = text;
+          label.contentEditable = 'false'; label.textContent = text; applyScreenplayFont(label,text);
           label.style.width = `${elementLayout({ type: 'character', rightMarginOffsetPt: offset }, item.kind === 'dual').width}px`;
           label.style.height = `${PAGE.lineHeight}px`; wrapper.append(label);
         };

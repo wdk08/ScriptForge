@@ -81,6 +81,19 @@
       const { createScreenplayPDF } = await import('/js/pdf-export.js');
       const pdf = await createScreenplayPDF(renamed.document);
       assert(new TextDecoder().decode((await pdf.blob.arrayBuffer()).slice(0, 5)) === '%PDF-', 'embedded fonts and PDF export produce a real PDF');
+      const {createDocument,createElement} = await import('/js/document.js');
+      const cueDoc=createDocument({elements:[createElement('action','VINCENT (V.O.)')]});
+      const cueHistory=new EditorHistory(cueDoc,caret(cueDoc.elements[0].id,14));
+      const cueResult=cueHistory.apply(cueHistory.current.selection,{type:'tab'});
+      assert(cueResult.document.elements.filter(el=>el.type==='character').length===1 && cueResult.document.elements[0].id===cueDoc.elements[0].id && cueResult.document.elements.find(el=>el.type==='parenthetical')?.text==='()' && cueResult.selection.focus.offset===1,'native Tab preserves the existing cue and focuses one parenthetical');
+      cueHistory.undo();assert(cueHistory.current.document.elements[0].type==='action','native cue Tab undo restores Action');cueHistory.redo();
+      const unicodeText='Straight "quote" and apostrophe\' — “curly” ‘apostrophe’ – ellipsis… café naïve José Ω Ж ✓ → ♥ cafe\u0301. ';
+      const unicodeDoc=createDocument({title:'Unicode Ω',elements:[createElement('scene','INT. CAFÉ Ω - DAY',{sceneNumber:'125'}),createElement('character','VINCENT'),createElement('dialogue',unicodeText.repeat(24))]});unicodeDoc.settings={boldSceneHeadings:true,sceneNumbers:true};
+      const unicodeBefore=JSON.stringify(unicodeDoc),unicodeHost=document.createElement('div');unicodeHost.className='measurement';document.body.append(unicodeHost);
+      const unicodePages=paginate(layoutUnits(unicodeDoc,createMeasurer(unicodeHost)));unicodeHost.remove();
+      const unicodePDF=await createScreenplayPDF(unicodeDoc);
+      assert(unicodePDF.pages===unicodePages.length+1 && unicodePDF.pages>=3 && JSON.stringify(unicodeDoc)===unicodeBefore,'native Unicode PDF preserves text and measured pagination');
+      await invoke('desktop_diagnostics_pdf',{bytes:Array.from(new Uint8Array(await unicodePDF.blob.arrayBuffer()))});
       if (info.layoutSource) {
         const proof = parseFountain(info.layoutSource); proof.settings = { ...proof.settings, sceneNumbers: true };
         proof.elements.find(el => el.type === 'dialogue').rightMarginOffsetPt = 4;

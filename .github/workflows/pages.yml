@@ -20,6 +20,7 @@ jobs:
       - run: npm run check
       - run: npm run build:web
       - run: npx playwright install --with-deps chromium
+      - run: sudo apt-get install --yes poppler-utils
       - run: npx playwright test --config=playwright.web.config.js --workers=2
       - uses: actions/upload-pages-artifact@v4
         with:

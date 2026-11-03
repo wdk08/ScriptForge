@@ -1,3 +1,5 @@
+import { pdfTextWriter, validatePDFCharacters } from './pdf-unicode.js';
+import { needsUnicodeFont, UNICODE_SCALE } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
 import { isDesktop, exportDesktop } from './desktop.js';
 import { titlePageFields, titleContactLayout } from './title-page.js';
@@ -23,30 +25,43 @@ export function printableDocument(document) {
   doc.elements = doc.elements.filter(el => printable.has(el.type)).map(el => ({ ...el, text: plain(parseInline(el.text)) }));
   return doc;
 }
-async function fontData(name) {
-  const response = await fetch(new URL(`../assets/fonts/CourierPrime-${name}.ttf`, import.meta.url));
+async function fontData(name, family = 'CourierPrime') {
+  const response = await fetch(new URL(`../assets/fonts/${family}${name ? `-${name}` : ''}.ttf`, import.meta.url));
   if (!response.ok) throw new Error('PDF export could not load its local Courier font.');
   const bytes = new Uint8Array(await response.arrayBuffer());
   let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 export async function createScreenplayPDF(document) {
-  const [PDF, regular, bold] = await Promise.all([pdfLibrary(), fontData('Regular'), fontData('Bold'), ensureScreenplayFonts()]);
+  const [PDF, regular, bold, unicode, unicodeBold] = await Promise.all([pdfLibrary(), fontData('Regular'), fontData('Bold'), fontData('', 'DejaVuSansMono'), fontData('Bold', 'DejaVuSansMono'), ensureScreenplayFonts()]);
   const doc = printableDocument(document);
+  const title = titlePageFields(doc);
+  validatePDFCharacters(doc,title);
   const measure = window.document.createElement('div'); measure.className = 'measurement pdf-measure'; measure.setAttribute('aria-hidden', 'true'); window.document.body.append(measure);
-  let pages, baseline, boldBaseline;
+  let pages, baseline, boldBaseline, unicodeBaseline, unicodeBoldBaseline;
   try {
     pages = paginate(layoutUnits(doc, createMeasurer(measure)));
     baseline = fontBaseline(measure); boldBaseline = fontBaseline(measure, FORMAT.fontSize, FORMAT.lineHeight, true);
+    unicodeBaseline = fontBaseline(measure, FORMAT.fontSize*UNICODE_SCALE, FORMAT.lineHeight, false, 'ScriptForge Unicode');
+    unicodeBoldBaseline = fontBaseline(measure, FORMAT.fontSize*UNICODE_SCALE, FORMAT.lineHeight, true, 'ScriptForge Unicode');
   } finally { measure.remove(); }
-  const pdf = new PDF({ unit: 'pt', format: 'letter', compress: true });
+  const pdf = new PDF({ unit: 'pt', format: 'letter', compress: true, putOnlyUsedFonts: true });
+  // ActualText for combining clusters is standardized in PDF 1.4.
+  pdf.__private__.setPdfVersion('1.4');
   pdf.addFileToVFS('CourierPrime-Regular.ttf', regular); pdf.addFont('CourierPrime-Regular.ttf', 'CourierPrime', 'normal');
   pdf.addFileToVFS('CourierPrime-Bold.ttf', bold); pdf.addFont('CourierPrime-Bold.ttf', 'CourierPrime', 'bold');
+  pdf.addFileToVFS('DejaVuSansMono.ttf', unicode); pdf.addFont('DejaVuSansMono.ttf', 'ScriptForgeUnicode', 'normal');
+  pdf.addFileToVFS('DejaVuSansMono-Bold.ttf', unicodeBold); pdf.addFont('DejaVuSansMono-Bold.ttf', 'ScriptForgeUnicode', 'bold');
   // jsPDF otherwise truncates each TTF advance to an integer in 1/1000 em,
   // accumulating a measurable drift across a full line. Preserve the real widths.
-  for (const style of ['normal', 'bold']) {
-    pdf.setFont('CourierPrime', style);
+  for (const face of ['CourierPrime','ScriptForgeUnicode']) for (const style of ['normal', 'bold']) {
+    pdf.setFont(face, style);
     const metadata = pdf.getFont().metadata;
+    // OpenType shaping makes combining marks non-advancing in the browser.
+    // jsPDF does not apply GPOS, so mirror that advance explicitly.
+    const marks = new Set(Object.entries(metadata.cmap.unicode.codeMap).filter(([code]) => /\p{M}/u.test(String.fromCodePoint(Number(code)))).map(([,glyph])=>glyph));
+    const advance = metadata.widthOfGlyph.bind(metadata);
+    metadata.widthOfGlyph = glyph => marks.has(glyph) ? 0 : advance(glyph);
     const glyphs = [...new Set(Object.values(metadata.cmap.unicode.codeMap))];
     metadata.Unicode.widths = glyphs.flatMap(glyph => [glyph, [metadata.widthOfGlyph(glyph)]]);
   }
@@ -54,33 +69,33 @@ export async function createScreenplayPDF(document) {
   const byId = new Map(doc.elements.map(el => [el.id, el]));
   const scale = .75;
   pdf.setFont('CourierPrime', 'normal'); pdf.setFontSize(12);
-  const title = titlePageFields(doc);
-  const titleLines = pdf.splitTextToSize(title.title.toUpperCase(), 444);
-  pdf.text(titleLines, 306, 240, { align: 'center', baseline: 'top', lineHeightFactor: 1.25 });
+  const {draw,wrap} = pdfTextWriter(pdf);
+  const titleLines = wrap(title.title.toUpperCase(), 444);
+  draw(titleLines, 306, 240, { align: 'center', baseline: 'top', lineHeightFactor: 1.25 });
   const creditY = 240 + titleLines.length * 15 + 36;
-  const creditLines = pdf.splitTextToSize(title.credit, 444);
-  pdf.text(creditLines, 306, creditY, { align: 'center', baseline: 'top', lineHeightFactor: 1.25 });
-  pdf.text(pdf.splitTextToSize(title.author, 444), 306, creditY + creditLines.length * 15 + 15, { align: 'center', baseline: 'top', lineHeightFactor: 1.25 });
+  const creditLines = wrap(title.credit, 444);
+  draw(creditLines, 306, creditY, { align: 'center', baseline: 'top', lineHeightFactor: 1.25 });
+  draw(wrap(title.author, 444), 306, creditY + creditLines.length * 15 + 15, { align: 'center', baseline: 'top', lineHeightFactor: 1.25 });
   const contact = [title.address, title.phone, title.email].filter(Boolean).join('\n');
   if (contact) {
     const layout = titleContactLayout(PAGE.width, PAGE.height, scale, contact);
     const lines = layout.lines;
     const top = layout.bottom - lines.length * layout.lineHeight;
     lines.forEach((line, index) => {
-      pdf.text(line, layout.x, top + index * layout.lineHeight, { align: 'left', baseline: 'top' });
+      draw(line, layout.x, top + index * layout.lineHeight, { align: 'left', baseline: 'top' });
     });
   }
   pages.forEach((page, index) => {
     pdf.addPage('letter', 'portrait');
     pdf.setFont('CourierPrime', 'normal'); pdf.setFontSize(12);
     pdf.setCharSpace(0);
-    if (index > 0) pdf.text(`${index + 1}.`, FORMAT.pageNumberX * scale, (FORMAT.pageNumberY + baseline) * scale, { baseline: 'alphabetic' });
+    if (index > 0) draw(`${index + 1}.`, FORMAT.pageNumberX * scale, (FORMAT.pageNumberY + baseline) * scale, { baseline: 'alphabetic' });
     let y = FORMAT.top;
     for (const item of page.items) {
       y += item.gap;
       const marker = (text, col, rowY) => {
         pdf.setFont('CourierPrime', 'normal'); pdf.setFontSize(12); pdf.setCharSpace(FORMAT.letterSpacing * scale);
-        pdf.text(text.toUpperCase().replace(/\n$/, ''), elementColumn('character', item.kind === 'dual', col).left * scale, (rowY + baseline) * scale, { baseline: 'alphabetic' });
+        draw(text.toUpperCase().replace(/\n$/, ''), elementColumn('character', item.kind === 'dual', col).left * scale, (rowY + (needsUnicodeFont(text)?unicodeBaseline:baseline)) * scale, { baseline: 'alphabetic',tracking:FORMAT.letterSpacing*scale });
       };
       item.headers.forEach((lines, col) => lines.forEach((line, row) => marker(line.text, col, y + row * PAGE.lineHeight)));
       y += item.headerHeight;
@@ -91,22 +106,21 @@ export async function createScreenplayPDF(document) {
         const bold = model.type === 'scene' && doc.settings?.boldSceneHeadings === true;
         pdf.setFont('CourierPrime', bold ? 'bold' : 'normal'); pdf.setFontSize(12);
         pdf.setCharSpace(FORMAT.letterSpacing * scale);
-        // Refuse missing font glyphs rather than silently dropping screenplay text.
-        const glyphs = pdf.getFont().metadata.cmap.unicode.codeMap;
-        if ([...text].some(char => !glyphs[char.codePointAt(0)] && char !== '\n' && char !== '\t')) throw new Error('The PDF font does not support some characters in this screenplay. Fountain export preserves all characters.');
         const column = elementLayout(model, dual, col, doc.settings);
         let x = column.left, width = column.width;
         if (model.type === 'parenthetical' && line.start === 0 && text.startsWith('(')) x -= FORMAT.parentheticalHang;
         
-        const textY = (y + row * PAGE.lineHeight + (bold ? boldBaseline : baseline)) * scale;
+        const unicode = needsUnicodeFont(model.text,bold);
+        const rowBaseline = unicode ? (bold ? unicodeBoldBaseline : unicodeBaseline) : (bold ? boldBaseline : baseline);
+        const textY = (y + row * PAGE.lineHeight + rowBaseline) * scale;
         let align = 'left';
         if (model.type === 'transition' && !transitionClass(model)) { align = 'right'; x += width; }
         if (model.type === 'centered' || model.type === 'titleField') { align = 'center'; x += width / 2; }
         if (model.type === 'scene' && doc.settings?.sceneNumbers === true && line.start === 0 && model.sceneNumber) {
-          pdf.text(model.sceneNumber, FORMAT.sceneNumberLeft * scale, textY, { baseline: 'alphabetic' });
-          pdf.text(model.sceneNumber, FORMAT.sceneNumberRight * scale, textY, { align: 'right', baseline: 'alphabetic' });
+          draw(model.sceneNumber, FORMAT.sceneNumberLeft * scale, textY, { baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
+          draw(model.sceneNumber, FORMAT.sceneNumberRight * scale, textY, { align: 'right', baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
         }
-        if (text) pdf.text(text, x * scale, textY, { align, baseline: 'alphabetic' });
+        if (text) draw(text, x * scale, textY, { align, baseline: 'alphabetic', bold, family:unicode?'unicode':'courier', tracking:FORMAT.letterSpacing*scale });
       }));
       item.more.forEach((more, col) => { if (more) marker('(MORE)', col, y + item.bodyHeight); });
       y += item.bodyHeight + item.moreHeight;

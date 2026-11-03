@@ -48,7 +48,7 @@ export function ensureScreenplayFonts(doc = document) {
   if (!fontReady) fontReady = Promise.all(['normal 400', 'normal 700', 'italic 400', 'italic 700'].map(style =>
     doc.fonts.load(`${style} ${FORMAT.fontSize}px "${FORMAT.font}"`).then(faces => {
       if (!faces.length) throw new Error('The bundled Courier Prime font could not load. Reload to retry.');
-    }))).catch(error => { fontReady = null; throw new Error(`The bundled Courier Prime fonts could not load. Reload to retry. ${error.message}`, { cause: error }); });
+    })).concat(['400','700'].map(weight => doc.fonts.load(`${weight} ${FORMAT.fontSize}px \"ScriptForge Unicode\"`).then(faces=>{if(!faces.length)throw new Error('Unicode fallback font could not load.');})))).catch(error => { fontReady = null; throw new Error(`The bundled Courier Prime fonts could not load. Reload to retry. ${error.message}`, { cause: error }); });
   return fontReady;
 }
 /** WebKit can prepend a zero-width rectangle from the PREVIOUS line at a wrap. */
@@ -57,9 +57,9 @@ export function textRangeRect(range) {
   return rects.findLast(rect => rect.width > 0) ?? rects.at(-1) ?? range.getBoundingClientRect();
 }
 /** Read the actual font baseline in a fixed line box, rather than guessing PDF ascent. */
-export function fontBaseline(container, fontSize = FORMAT.fontSize, lineHeight = FORMAT.lineHeight, bold = false) {
+export function fontBaseline(container, fontSize = FORMAT.fontSize, lineHeight = FORMAT.lineHeight, bold = false, family = FORMAT.font) {
   const box = document.createElement('div'), marker = document.createElement('span');
-  box.style.cssText = `font:${bold ? 700 : 400} ${fontSize}px/${lineHeight}px "${FORMAT.font}";white-space:nowrap;`;
+  box.style.cssText = `font:${bold ? 700 : 400} ${fontSize}px/${lineHeight}px "${family}";white-space:nowrap;`;
   marker.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline;';
   box.append(document.createTextNode('M'), marker); container.replaceChildren(box);
   return marker.getBoundingClientRect().top - box.getBoundingClientRect().top;

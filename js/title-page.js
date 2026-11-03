@@ -1,3 +1,4 @@
+import { applyScreenplayFont, graphemes } from './unicode-fonts.js';
 import { createElement, validateDocument } from './document.js';
 
 export const TITLE_CONTACT = Object.freeze({ width: 320, right: 96, left: 96, bottom: 100, lineHeight: 20 });
@@ -6,11 +7,11 @@ const contactAdvance = 16 * 1228 / 2048; // Untracked 16px Courier Prime 1.203.
 export function titleContactLayout(pageWidth = 816, pageHeight = 1056, scale = 1, text = '') {
   const raw = text.split('\n');
   const maxWidth = pageWidth - TITLE_CONTACT.left - TITLE_CONTACT.right;
-  const width = Math.min(maxWidth, Math.max(TITLE_CONTACT.width, ...raw.map(line => [...line].length * contactAdvance + 1)));
+  const width = Math.min(maxWidth, Math.max(TITLE_CONTACT.width, ...raw.map(line => graphemes(line).length * contactAdvance + 1)));
   // Shared wrapping, including unusually long unbroken email/address tokens.
   const maxChars = Math.max(1, Math.floor(width / contactAdvance));
   const lines = raw.flatMap(line => {
-    const result = [], chars = [...line];
+    const result = [], chars = graphemes(line);
     while (chars.length > maxChars) {
       let end = chars.slice(0, maxChars + 1).lastIndexOf(' ');
       if (end < 1) end = maxChars;
@@ -112,6 +113,7 @@ export function setupTitlePage(root, onEdit, onUndo) {
     root.style.setProperty('--title-contact-width', `${layout.width}px`);
     for (const [field, { input, printed }] of controls) {
       if (input.value !== values[field]) input.value = values[field];
+      applyScreenplayFont(input,values[field]);applyScreenplayFont(printed,values[field]);
       resize(input);
       if (printed.textContent !== values[field]) printed.textContent = values[field];
     }

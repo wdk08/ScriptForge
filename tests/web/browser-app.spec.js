@@ -1,3 +1,4 @@
+import {unicodePDFProof} from '../helpers/unicode-pdf.js';
 import {test,expect} from '@playwright/test';
 test.beforeEach(async({context})=>context.addInitScript(()=>{window.showDirectoryPicker=undefined;}));
 test('production subpath supports editing, persistence, statistics, exports and installer choices',async({page})=>{
@@ -36,3 +37,5 @@ test('statistics storage failure does not block screenplay editing or browser re
  await page.goto('./');await page.locator('#new-screenplay').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');await page.locator('#pages').click();await page.keyboard.type('Recovery still works.');await page.evaluate(()=>window.scriptForgeBeforeClose());
  expect(await page.evaluate(async()=>{const doc=window.scriptForge.getDocument();return (await(await import('./js/storage.js')).repository.get(doc.id)).recovery.document.elements.some(e=>e.text.includes('Recovery still works.'));})).toBe(true);
 });
+
+test('deployed browser supports real Unicode PDF text and matching pagination',async({page},testInfo)=>unicodePDFProof(page,testInfo));

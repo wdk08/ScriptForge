@@ -52,6 +52,7 @@ jobs:
       - name: Chromium rendering and browser regression checks before native builds
         run: |
           npx playwright install --with-deps chromium
+          sudo apt-get install --yes poppler-utils
           node scripts/probe-browser-fonts.mjs
           npx playwright test --workers=2 --config=playwright.ci.config.js
       - name: Production browser edition regression checks
@@ -142,6 +143,12 @@ jobs:
           else
             node scripts/smoke-desktop.mjs "src-tauri/target/${{ matrix.target }}/release/bundle/macos/ScriptForge.app/Contents/MacOS/scriptforge"
           fi
+      - name: Retain actual native Unicode PDF for independent text extraction
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-pdf-${{ matrix.target }}
+          path: test-results/native-unicode.pdf
+          if-no-files-found: error
       - name: Create download integrity checksums
         run: node scripts/artifact-checksums.mjs src-tauri/target/${{ matrix.target }}/release/bundle
       - name: Retain installers for approved manual platform validation
@@ -164,3 +171,19 @@ jobs:
         shell: bash
         run: |
           echo 'Validation artifacts only; no GitHub Release, tag, source push or publication performed by this workflow. Installed-update proof is a required step on all platforms, not a compilation claim. Internet-quarantined installation and managed OS policies still require separate manual checks. See INSTALLING.md and docs/PLATFORM-VALIDATION.md.' >> "$GITHUB_STEP_SUMMARY"
+
+  pdf-proof:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-pdf-*
+          path: native-pdfs
+      - run: sudo apt-get update && sudo apt-get install --yes poppler-utils
+      - name: Independently extract Unicode text from every native platform PDF
+        run: node scripts/verify-unicode-pdfs.mjs native-pdfs

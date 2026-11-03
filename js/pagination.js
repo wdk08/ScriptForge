@@ -1,3 +1,4 @@
+import { applyScreenplayFont } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
 import { automaticContinuations, continuedCue } from './continuations.js';
 import { dialogueGroups } from './document.js';
@@ -144,6 +145,7 @@ export function createMeasurer(container) {
     const paragraph = document.createElement('div');
     paragraph.className = `screenplay-element ${CLASS_NAMES[el.type] ?? 'actionLine'} ${dual ? 'dualMeasure' : ''} ${transitionClass(el)}`;
     if (el.type === 'scene') paragraph.style.fontWeight = settings.boldSceneHeadings === true ? '700' : '400';
+    applyScreenplayFont(paragraph, el.text, el.type === 'scene' && settings.boldSceneHeadings === true);
     paragraph.style.width = `${elementLayout(el, dual, 0, settings).width}px`;
     const node = document.createTextNode(el.text + '\u200b');
     paragraph.append(node); container.replaceChildren(paragraph);

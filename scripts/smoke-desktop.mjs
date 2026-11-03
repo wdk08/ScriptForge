@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, copyFile, access } from 'node:fs/promises';
+import { mkdtemp, readFile, copyFile, access, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -27,4 +27,6 @@ for (const restart of [false, true]) {
     });
   });
 }
+await mkdir('test-results',{recursive:true});
+await copyFile(join(root,'layout-proof.pdf'),'test-results/native-unicode.pdf');
 console.log(`Native smoke test evidence: ${root}`);

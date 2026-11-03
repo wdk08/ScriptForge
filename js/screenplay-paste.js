@@ -30,14 +30,14 @@ function narrative(text, names) {
 
 /** Shared recognition only: callers retain the original text and choose evidence. */
 export function classifyScreenplayLine(text, { inDialogue = false, allowCue = false,
-  allowTransition = true, allowParenthetical = inDialogue, names = new Set(), fallback = inDialogue ? 'dialogue' : 'action' } = {}) {
+  strictCue = false, allowTransition = true, allowParenthetical = inDialogue, names = new Set(), fallback = inDialogue ? 'dialogue' : 'action' } = {}) {
   const candidate = unwrapBold(text.trim());
   if (hasScenePrefix(candidate) && (!inDialogue || candidate === candidate.toUpperCase()
     || Boolean(sceneLocation(candidate.replace(/\s+#[\w.-]+#\s*$/, ''))?.qualifier))
     || /^\.[\p{L}\p{N}]/u.test(candidate)) return 'scene';
   if ((allowTransition && isCommonTransition(candidate)) || /^>[^<]+$/.test(candidate)) return 'transition';
   if (allowCue && (cue(candidate) || extendedCue(candidate) || (names.has(cueName(candidate)) && cue(candidate.toUpperCase())))
-    && !narrative(candidate, names)) return 'character';
+    && !narrative(candidate, names) && (!strictCue || !narrativeLine.test(candidate))) return 'character';
   if (allowParenthetical && /^\([^\n]*\)$/.test(candidate)) return 'parenthetical';
   return fallback;
 }

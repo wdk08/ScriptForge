@@ -115,6 +115,7 @@ jobs:
       - name: Chrome regression suite
         run: |
           npx playwright install --with-deps chromium
+          sudo apt-get install --yes poppler-utils
           npx playwright test --workers=2 --config=playwright.ci.config.js
   draft:
     needs: review

@@ -141,5 +141,5 @@ test('official release publishes same-run installed-update tested bytes without 
  assert.match(attachment,/pattern: installers-\*/);assert.match(attachment,/name: corresponding-source/);
  assert.match(attachment,/prepare-verified-release\.mjs/);assert.doesNotMatch(attachment,/tauri-action|tauri build|matrix:/);
  assert.match(attachment,/matches\[0\]\.digest!==digest/);
- assert.match(await readFile('scripts/test-installed-update.mjs','utf8'),/const fromVersion = '1\.0\.1'/);
+ assert.match(await readFile('scripts/test-installed-update.mjs','utf8'),/const fromVersion = '1\.1\.0'/);
 });

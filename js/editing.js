@@ -4,7 +4,7 @@ import { dualElementIds } from './document.js';
 import { toggleContinuation } from './continuations.js';
 import { replaceMatches } from './search.js';
 import { changeTitlePage } from './title-page.js';
-import { screenplayPaste, insertScreenplayPaste, normalizeScreenplayClipboard, classifyReturnFragment } from './screenplay-paste.js';
+import { screenplayPaste, insertScreenplayPaste, normalizeScreenplayClipboard, classifyReturnFragment, classifyScreenplayLine } from './screenplay-paste.js';
 import { createElement, validateDocument, dialogueGroups } from './document.js';
 import { screenplaySettings, changeScreenplaySettings, redoSceneNumbers } from './screenplay-settings.js';
 import { hasScenePrefix, completeSceneLocation } from './scene-locations.js';
@@ -347,6 +347,18 @@ export function editDocument(document, selection, command) {
       break;
     }
     case 'tab': {
+      if (!command.reverse && range.first === range.last && el.type === 'action') {
+        const line = lineAt(el.text, next.focus.offset);
+        const names = new Set(doc.elements.filter(item => item.type === 'character').map(item => cueIdentity(item.text)));
+        if (classifyScreenplayLine(line.text,{allowCue:true,names,strictCue:true}) === 'character') {
+          const name=line.text.trim().toUpperCase(), prefix=el.text.slice(0,line.start).replace(/\n$/,''), suffix=el.text.slice(line.end).replace(/^\n/,'');
+          let cue=el;
+          if(prefix){el.text=prefix;cue=createElement('character',name);insertAfter(doc,el,cue);}else{el.type='character';el.text=name;delete el.dual;}
+          if(suffix)insertAfter(doc,cue,createElement('action',suffix));
+          next=advanceLine(doc,cue,caret(cue.id,name.length),'parenthetical');
+          break;
+        }
+      }
       const order = EDIT_TYPES;
       const index = Math.max(0, order.indexOf(el.type));
       let type = order[(index + (command.reverse ? order.length - 1 : 1)) % order.length];
