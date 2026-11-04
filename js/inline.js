@@ -26,7 +26,10 @@ export function parseInline(text) {
         for (let p = end - 1; p >= 0 && text[p] === '\\'; p--) slashes++;
         if (slashes % 2 === 0 && !/\s/.test(text[end - 1])) {
           // A bold span may close immediately after nested italics: **a *b***.
-          if (marker === '**' && text.startsWith('***', end)) end++;
+          if (marker === '**' && text.startsWith('***', end)) {
+            const inside=text.slice(i+marker.length,end).replace(/\\./g,'');
+            if ((inside.match(/(?<!\*)\*(?!\*)/g)??[]).length%2) end++;
+          }
           break;
         }
         end += marker.length;

@@ -8,7 +8,9 @@ jsPDF does not apply OpenType GPOS positioning. Combining marks therefore use ze
 
 The regression fixture covers straight and curly quotes/apostrophes, em/en dashes, ellipses, accented Latin letters, decomposed accents, Greek/Cyrillic letters, check marks, arrows and hearts. Exported text is independently extracted with Poppler. Native release validation generates a PDF on each supported platform and verifies all three files before publication.
 
-Coverage is finite. Color emoji and glyphs outside both bundled fonts produce an error naming the character, Unicode code point, element/title field, line and column. The editor and Fountain content remain intact.
+Standard Unicode 17 emoji, including supported skin tones, flags, variation selectors and ZWJ sequences, use bundled Twemoji 17.0.3 artwork. Each grapheme occupies two screenplay cells in both DOM measurement and PDF; the surrounding Courier text and 16px line height are unchanged. PDFs embed color images at 144px resolution with invisible text carriers and PDF ActualText tags for searchable/copyable original sequences in readers supporting ActualText. Export metadata retains attribution. No network is used at export time.
+
+Coverage is finite. Unrecognized emoji sequences or glyphs outside the bundled fonts still produce a precise diagnostic; no placeholders or text substitutions are inserted. Text-presentation selectors keep text presentation. Bold/italic runs use the existing Fountain inline AST and real embedded Courier/DejaVu font faces, with the same measurement as the editor. The live document is never modified for export.
 
 ## Testing
 

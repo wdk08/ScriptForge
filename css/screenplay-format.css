@@ -26,3 +26,8 @@
 /* Fixed page gutter, independent of the heading's adjustable writing width. */
 .sceneHeader[data-scene-number]::after{left:calc(var(--scene-number-right) - var(--scene-number-width));right:auto;width:var(--scene-number-width);white-space:nowrap;overflow-wrap:normal;text-align:right}
 @media print{.screenplay-page{padding:var(--body-top) var(--body-right) var(--body-bottom) var(--body-left);outline:0}}
+
+.screenplay-emoji{display:inline-block;height:16px;line-height:16px;vertical-align:top;letter-spacing:0;color:transparent;background-size:14px 14px;background-position:center;background-repeat:no-repeat;font-size:0;overflow:hidden}
+
+@font-face{font-family:'ScriptForge Unicode';src:url('../assets/fonts/DejaVuSansMono-Oblique.ttf') format('truetype');font-weight:400;font-style:italic;font-display:block}
+@font-face{font-family:'ScriptForge Unicode';src:url('../assets/fonts/DejaVuSansMono-BoldOblique.ttf') format('truetype');font-weight:700;font-style:italic;font-display:block}

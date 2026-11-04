@@ -23,7 +23,7 @@ test('Enter follows screenplay types; empty dialogue returns to action without a
   assert.equal(editableElements(result.document).at(-1).type, 'action');
   const count = editableElements(result.document).length;
   result = editDocument(result.document, result.selection, { type: 'enter' });
-  assert.equal(editableElements(result.document).length, count);
+  assert.equal(editableElements(result.document).length, count + 1);
 });
 test('Enter splits Action at the caret and parenthetical advances to dialogue', () => {
   const doc = docWith('action', 'OneTwo');

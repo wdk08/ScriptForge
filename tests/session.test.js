@@ -214,7 +214,7 @@ test('saving a scene after Fade In tolerates in-progress heading whitespace with
       const scene = parsed.elements.find(el => el.type === 'scene');
       if (text.trim()) { assert.equal(scene.text, text.trim()); assert.equal(scene.sceneNumber, number); }
       else assert.equal(scene, undefined);
-      assert.equal(parsed.elements.find(el => el.type === 'action').text, 'A quiet room.');
+      assert.equal(parsed.elements.filter(el => el.type === 'action').at(-1).text, 'A quiet room.');
     }
   }
 });

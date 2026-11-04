@@ -49,6 +49,8 @@ test('middle typing, format, caret offset, split, Tab, undo and redo', async ({ 
   await page.keyboard.press('Enter');
   expect(await page.evaluate(() => window.scriptForge.getSelection().focus.offset)).toBe(0);
   await page.keyboard.press('ControlOrMeta+z');
+  expect(await page.evaluate(() => window.scriptForge.getSelection().focus.offset)).toBe(0);
+  await page.keyboard.press('ControlOrMeta+z');
   expect(await page.evaluate(() => window.scriptForge.getSelection().focus.offset)).toBe(10);
   await page.keyboard.press('ControlOrMeta+Shift+z');
   expect(await page.evaluate(() => window.scriptForge.getSelection().focus.offset)).toBe(0);
@@ -61,6 +63,8 @@ test('character Enter leads to dialogue; empty speech returns to action; Backspa
   await page.keyboard.type('New speech.');
   await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
   expect(await page.evaluate(() => window.scriptForge.getDocument().elements.find(el => el.id === window.scriptForge.getSelection().focus.id).type)).toBe('action');
+  await page.keyboard.press('Backspace');
+  expect(await page.evaluate(() => window.scriptForge.getSelection().focus.offset)).toBe(0);
   await page.keyboard.press('Backspace');
   expect(await page.evaluate(() => window.scriptForge.getSelection().focus.offset)).toBe(11);
 });

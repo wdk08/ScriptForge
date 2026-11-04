@@ -1,3 +1,4 @@
+import { inlinePlain } from './inline-layout.js';
 import { automaticContinuations, continuedCue } from './continuations.js';
 import { createDocument, createElement, meaningfulContent, newId, validateDocument } from './document.js';
 import { parseFountain, serializeFountain } from './fountain.js';
@@ -29,7 +30,7 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
   // end in the space just typed after INT./EXT. Fountain trims scene headings;
   // normalize only this export copy, leaving editor text and caret untouched.
   for (const el of doc.elements) if (el.type === 'scene') el.text = el.text.trim().toUpperCase();
-  doc.elements = doc.elements.filter(el => el.type === 'scene' ? Boolean(el.text) : el.text || !draftingTypes.includes(el.type) || el.sceneNumber);
+  doc.elements = doc.elements.map(el => !el.text && draftingTypes.includes(el.type) ? {...el,type:'action'} : el);
   let speech = false, projected = false;
   for (const el of doc.elements) {
     if (el.type === 'whitespace') continue;
@@ -39,7 +40,7 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
       : ['transition','parenthetical','centered','section','synopsis'].includes(el.type) && el.text.trim() !== el.text;
     const dialogueSpace = el.type === 'dialogue' && el.text.split('\n').some(line =>
       line.trim() ? line.trimStart() !== line : line === '  ');
-    const invalidScene = el.type === 'scene' && !/^[\p{L}\p{N}]/u.test(el.text);
+    const invalidScene = el.type === 'scene' && !/^[\p{L}\p{N}]/u.test(inlinePlain(el.text));
     const singleLine = ['scene','character','transition','centered','lyric','section','synopsis'].includes(el.type) && el.text.includes('\n');
     const hiddenDelimiter = (el.type === 'note' && (el.text.includes(']]') || el.text.endsWith(']')))
       || (el.type === 'boneyard' && el.text.includes('*/'));

@@ -1,3 +1,5 @@
+import { visualClickCaret } from './selection.js';
+import { inlineUnits } from './inline-layout.js';
 import {createWritingController} from './writing-controller.js';
 import {setupWritingStatistics} from './writing-statistics.js';
 import { flushForUpdate } from './update-safety.js';
@@ -111,6 +113,7 @@ An unseen light travels across the hills. One by one, the distant towers begin t
 `;
 
 let features, editingLocked = false;
+let typingStyles=null, typingPoint=null;
 let history, currentSelection, pageLayout = [], dirty = false, composition = null;
 let outlineSignature = '', wordCounts = new Map();
 let composingJustEnded = false, noticeTimer, renderTimer, preferredX = null;
@@ -230,17 +233,22 @@ function apply(command, selection = readSelection(root) ?? currentSelection) {
     }).catch(error => { notify(`Edit stopped: ${error.message}`); }).finally(() => { editingLocked = false; root.contentEditable = 'true'; });
   }
   preferredX = null;
+  if(command.type==='insert'&&typingStyles){
+    if(JSON.stringify(selection)===typingPoint)command={...command,styles:typingStyles};else typingStyles=null;
+  }
   try {
     statisticsKind = command.statisticsKind ?? command.type;
     const element = history.current.document.elements.find(el => el.id === selection.anchor.id);
     statisticsDetails = {text: command.type === 'insert' ? command.text : '', prefix: element?.text.slice(0, selection.anchor.offset) ?? ''};
     const state = history.apply(selection, command);
     currentSelection = state.selection; dirty = true;
+    if(typingStyles)typingPoint=JSON.stringify(currentSelection);
     session.changed(state.document, currentSelection);
     render(false); restoreSelection(root, currentSelection, { scroll: true }); activeElement.update(); sceneAutocomplete.update({ edited: true });
   } catch (error) { notify(error.message); }
 }
 function undo(redo = false) {
+  typingStyles=null;
   if (editingLocked) return;
   statisticsKind = redo ? 'redo' : 'undo';
   const state = redo ? history.redo() : history.undo();
@@ -269,6 +277,9 @@ root.addEventListener('beforeinput', event => {
   else if (event.inputType === 'insertLineBreak') apply({ type: 'lineBreak' }, selection);
   else if (event.inputType === 'deleteContentBackward') apply({ type: 'backspace' }, selection);
   else if (event.inputType === 'deleteContentForward') apply({ type: 'delete' }, selection);
+  else if(['formatBold','formatItalic'].includes(event.inputType)){
+    const key=event.inputType==='formatBold'?'b':'i';root.dispatchEvent(new KeyboardEvent('keydown',{key,ctrlKey:true,bubbles:true,cancelable:true}));
+  }
   else if (event.inputType === 'historyUndo') undo();
   else if (event.inputType === 'historyRedo') undo(true);
   else if (event.inputType.startsWith('delete') && !['deleteByCut', 'deleteByDrag'].includes(event.inputType)) {
@@ -300,6 +311,14 @@ root.addEventListener('keydown', event => {
   }
   if (mod && !event.shiftKey && !event.altKey && formatShortcuts[key]) {
     event.preventDefault(); apply({ type: 'format', elementType: formatShortcuts[key] }, selection); return;
+  }
+  if(mod&&!event.altKey&&!event.shiftKey&&['b','i'].includes(key)){
+    event.preventDefault();event.stopPropagation();const style=key==='b'?'bold':'italic';
+    if(selection.anchor.id!==selection.focus.id||selection.anchor.offset!==selection.focus.offset){typingStyles=null;apply({type:'inlineFormat',style},selection);}
+    else {const el=history.current.document.elements.find(el=>el.id===selection.focus.id),units=inlineUnits(el.text),at=selection.focus.offset;
+      if(!typingStyles||typingPoint!==JSON.stringify(selection)){const active=units.find(u=>u.start<at&&u.end>=at)||{};typingStyles={bold:!!active.bold,italic:!!active.italic};}
+      typingStyles[style]=!typingStyles[style];typingPoint=JSON.stringify(selection);
+    }return;
   }
   if (mod && key === 'z') { event.preventDefault(); undo(event.shiftKey); return; }
   if (mod && key === 'y') { event.preventDefault(); undo(true); return; }
@@ -370,7 +389,16 @@ root.addEventListener('keydown', event => {
     restoreSelection(root, currentSelection, { scroll: true });
   }
 });
+let clickStart=null;
+root.addEventListener('pointerup',event=>{
+ const start=clickStart;clickStart=null;
+ if(!start||event.detail>1||event.shiftKey||event.metaKey||event.ctrlKey||Math.hypot(event.clientX-start.x,event.clientY-start.y)>3)return;
+ const native=window.getSelection();if(native&&!native.isCollapsed)return;
+ const selection=visualClickCaret(root,event.clientX,event.clientY);
+ if(selection){currentSelection=selection;restoreSelection(root,selection);activeElement.update();}
+});
 root.addEventListener('pointerdown', event => {
+  clickStart=event.button===0?{x:event.clientX,y:event.clientY}:null;
   preferredX = null;
   const fragment = event.target.closest('[data-element-id]');
   const cue = history?.current.document.elements.find(el => el.id === fragment?.dataset.elementId && el.type === 'character');

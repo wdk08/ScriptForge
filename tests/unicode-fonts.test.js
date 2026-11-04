@@ -9,6 +9,6 @@ test('ordinary typography stays Courier; Unicode fallback preserves text and the
  assert.deepEqual(unsupportedCharacters('Straight "curly” apostrophe\' – é Ω Ж ✓ → ♥ cafe\u0301'),[]);assert.equal(UNICODE_SCALE*1233,1228);
 });
 test('unsupported supplementary characters identify code point and exact screenplay location',()=>{
- assert.throws(()=>validatePDFCharacters({elements:[{id:'sample',type:'dialogue',text:'First line\nAn 🦖 arrives.'}]},{}),/🦖.*U\+1F996.*dialogue element 1.*line 2, column 4/);
- assert.throws(()=>validatePDFCharacters({elements:[]},{author:'Writer 🦖'}),/title-page author/);
+ assert.throws(()=>validatePDFCharacters({elements:[{id:'sample',type:'dialogue',text:'First line\nAn \u{10ffff} arrives.'}]},{}),/U\+10FFFF.*dialogue element 1.*line 2, column 4/);
+ assert.throws(()=>validatePDFCharacters({elements:[]},{author:'Writer \u{10ffff}'}),/title-page author/);
 });

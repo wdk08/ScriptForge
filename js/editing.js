@@ -1,3 +1,4 @@
+import { toggleInline, insertInline, inlineUnits, inlinePlain, serializeUnits } from './inline-layout.js';
 import { cueIdentity, extendedCue } from './character-cues.js';
 import { rightMarginBounds } from './right-margins.js';
 import { dualElementIds } from './document.js';
@@ -37,6 +38,9 @@ function replaceRange(doc, selection, insertion = '') {
   const range = orderedSelection(doc, selection);
   const first = range.elements[range.first], last = range.elements[range.last];
   const offset = range.start.offset;
+  if(first===last && inlineUnits(first.text).some(u=>u.bold||u.italic||u.underline)){
+    const result=insertInline(first.text,offset,range.end.offset,insertion);first.text=result.text;return caret(first.id,result.offset);
+  }
   if (range.first !== range.last && offset === 0 && range.end.offset < last.text.length) {
     // The first paragraph was entirely selected. Its format must not be
     // transferred onto surviving speech (or other text) from the last paragraph.
@@ -56,7 +60,7 @@ function replaceRange(doc, selection, insertion = '') {
 
 function insertAfter(doc, el, added) {
   const index = doc.elements.findIndex(item => item.id === el.id);
-  const separator = ['dialogue', 'parenthetical'].includes(added.type) ? [] : [createElement('whitespace', '\n')];
+  const separator = ['dialogue', 'parenthetical'].includes(added.type) || (!el.text.trim() && !added.text.trim()) ? [] : [createElement('whitespace', '\n')];
   doc.elements.splice(index + 1, 0, ...separator, added);
 }
 
@@ -173,10 +177,10 @@ function recognizeTypedScene(doc, selection, original, originalSelection) {
   if (el?.type !== 'action') return selection;
   const line = lineAt(el.text, selection.focus.offset);
   const scenePrefix = { test: hasScenePrefix };
-  if (!scenePrefix.test(line.text)) return selection;
+  if (!scenePrefix.test(inlinePlain(line.text))) return selection;
   const before = original.elements.find(item => item.id === el.id);
   // A manually forced Action remains Action when its prefix was already present.
-  if (before && scenePrefix.test(lineAt(before.text, orderedSelection(original, originalSelection).start.offset).text)) return selection;
+  if (before && scenePrefix.test(inlinePlain(lineAt(before.text, orderedSelection(original, originalSelection).start.offset).text))) return selection;
   const leading = line.text.length - line.text.trimStart().length;
   const prefix = el.text.slice(0, line.start).replace(/\n$/, '');
   const suffix = el.text.slice(line.end).replace(/^\n/, '');
@@ -193,7 +197,7 @@ function recognizeTypedTransition(doc, selection) {
   const el = doc.elements.find(item => item.id === selection.focus.id);
   if (el?.type !== 'action') return selection;
   const line = lineAt(el.text, selection.focus.offset);
-  if (!isCommonTransition(line.text)) return selection;
+  if (!isCommonTransition(inlinePlain(line.text))) return selection;
   const prefix = el.text.slice(0, line.start).replace(/\n$/, '');
   const suffix = el.text.slice(line.end).replace(/^\n/, '');
   let transition = el;
@@ -251,11 +255,23 @@ export function editDocument(document, selection, command) {
       }
       break;
     }
+    case 'inlineFormat': {
+      for(const item of range.elements.slice(range.first,range.last+1)){
+        let a=item.id===range.start.id?range.start.offset:0,b=item.id===range.end.id?range.end.offset:item.text.length;
+        if(item.type==='parenthetical'&&item.text.startsWith('(')&&item.text.endsWith(')')){a=Math.max(1,a);b=Math.min(item.text.length-1,b);}
+        const result=toggleInline(item.text,a,b,command.style);item.text=result.text;
+        if(item.id===range.start.id)next.anchor={id:item.id,offset:result.start};
+        if(item.id===range.end.id)next.focus={id:item.id,offset:result.end};
+      }break;
+    }
     case 'lineBreak':
       next = replaceRange(doc, next, '\n');
       break;
     case 'insert':
-      next = replaceRange(doc, next, el.type === 'parenthetical' ? command.text.replace(/\r\n|\r/g, '\n') : capitalizeInsertion(command.text.replace(/\r\n|\r/g, '\n'), el.text.slice(0, range.start.offset)));
+      { const text=el.type === 'parenthetical' ? command.text.replace(/\r\n|\r/g, '\n') : capitalizeInsertion(command.text.replace(/\r\n|\r/g, '\n'), inlinePlain(el.text.slice(0, range.start.offset)));
+      if(range.first===range.last && text && (command.styles || inlineUnits(el.text).some(u=>u.bold||u.italic||u.underline))){
+        const result=insertInline(el.text,range.start.offset,range.end.offset,text,command.styles);el.text=result.text;next=caret(el.id,result.offset);
+      }else next=replaceRange(doc,next,text); }
       if (command.text) next = correctWord(doc, next);
       break;
     case 'enter': {
@@ -264,13 +280,18 @@ export function editDocument(document, selection, command) {
         const enclosed = el === last && el.type === 'parenthetical' && /^\([\s\S]*\)$/.test(el.text);
         const before = el.text.slice(0, enclosed ? Math.max(1, range.start.offset) : range.start.offset);
         const text = last.text.slice(enclosed ? Math.min(range.end.offset, last.text.length - 1) : range.end.offset, enclosed ? -1 : undefined);
-        const type = classifyReturnFragment(text, { originalType: last.type, before,
+        const type = classifyReturnFragment(inlinePlain(text), { originalType: last.type, before,
           previous: range.elements[range.first - 1], following: range.elements[range.last + 1],
           characters: doc.elements.filter(item => item.type === 'character').map(item => item.text) });
-        const added = createElement(type, text);
+        let beforeText=before,afterText=text;
+        if(!enclosed&&inlineUnits(el.text).some(u=>u.bold||u.italic||u.underline)){
+          const left=inlineUnits(el.text).filter(u=>u.end<=range.start.offset),right=inlineUnits(last.text).filter(u=>u.start>=range.end.offset);
+          beforeText=serializeUnits(left).source;afterText=serializeUnits(right).source;
+        }
+        const added = createElement(type, afterText);
         if (type === last.type && last.rightMarginOffsetPt) added.rightMarginOffsetPt = last.rightMarginOffsetPt;
         const begin = doc.elements.indexOf(el), end = doc.elements.indexOf(last);
-        el.text = before + (enclosed ? ')' : '');
+        el.text = beforeText + (enclosed ? ')' : '');
         doc.elements.splice(begin + 1, end - begin);
         insertAfter(doc, el, added);
         next = caret(added.id);
@@ -291,7 +312,7 @@ export function editDocument(document, selection, command) {
           break;
         }
       }
-      next = advanceLine(doc, el, next, nextType(el));
+      next = advanceLine(doc, el, next, nextType(el), true);
       break;
     }
     case 'backspace':
@@ -306,6 +327,10 @@ export function editDocument(document, selection, command) {
         // Delete a full Unicode code point rather than half a surrogate pair.
         const count = backwards ? [...el.text.slice(0, at)].at(-1).length : [...el.text.slice(at)][0].length;
         const start = backwards ? at - count : at;
+        if(inlineUnits(el.text).some(u=>u.bold||u.italic||u.underline)){
+          const units=inlineUnits(el.text).filter(u=>!u.raw),u=backwards?[...units].reverse().find(u=>u.start<at):units.find(u=>u.end>at);
+          if(u){const result=insertInline(el.text,u.start,u.end,'');el.text=result.text;next=caret(el.id,result.offset);break;}
+        }
         el.text = el.text.slice(0, start) + el.text.slice(start + count);
         next = clearEmptyParenthetical(doc, caret(el.id, start));
       } else {
@@ -350,7 +375,7 @@ export function editDocument(document, selection, command) {
       if (!command.reverse && range.first === range.last && el.type === 'action') {
         const line = lineAt(el.text, next.focus.offset);
         const names = new Set(doc.elements.filter(item => item.type === 'character').map(item => cueIdentity(item.text)));
-        if (classifyScreenplayLine(line.text,{allowCue:true,names,strictCue:true}) === 'character') {
+        if (classifyScreenplayLine(inlinePlain(line.text),{allowCue:true,names,strictCue:true}) === 'character') {
           const name=line.text.trim().toUpperCase(), prefix=el.text.slice(0,line.start).replace(/\n$/,''), suffix=el.text.slice(line.end).replace(/^\n/,'');
           let cue=el;
           if(prefix){el.text=prefix;cue=createElement('character',name);insertAfter(doc,el,cue);}else{el.type='character';el.text=name;delete el.dual;}
@@ -395,7 +420,7 @@ export function editDocument(document, selection, command) {
   if (command.type === 'insert') next = recognizeTypedTransition(doc, next);
   // Splitting is structural, never typing: do not uppercase/correct fragments or
   // manufacture parentheses in either surviving half.
-  if (!smartReturn) finishTyping(doc, next, document);
+  if (!smartReturn && command.type!=='inlineFormat') finishTyping(doc, next, document);
   if (command.type === 'insert' && !command.text) next = clearEmptyParenthetical(doc, next);
   if (screenplaySettings(doc).sceneNumbers) redoSceneNumbers(doc);
   const dual = dualElementIds(doc);

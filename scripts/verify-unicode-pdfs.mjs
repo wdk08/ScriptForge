@@ -10,6 +10,8 @@ export function verifyUnicodePDF(file){
  }
  if(!text.includes('"quote"')||!text.includes("apostrophe'")||!text.includes('(MORE)')||!text.includes("(CONT'D)"))throw new Error(`PDF lost punctuation or page continuation text: ${file}`);
  if(text.split('cafe\u0301').length-1!==24)throw new Error('PDF extraction detached or reordered a combining accent.');
+ for(const emoji of ['😏','👍🏽','🇺🇸','👩🏽‍💻','👨‍👩‍👧‍👦','❤️','1️⃣','🦖'])if(text.split(emoji).length-1!==24)throw new Error(`PDF lost emoji sequence ${emoji}: ${file}`);
+ if(!text.includes('Bold Italic Both'))throw new Error(`PDF lost emphasized text: ${file}`);
  if(text.includes('\ufffd'))throw new Error('PDF contains replacement characters.');
  return text;
 }

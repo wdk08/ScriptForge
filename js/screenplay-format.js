@@ -48,7 +48,7 @@ export function ensureScreenplayFonts(doc = document) {
   if (!fontReady) fontReady = Promise.all(['normal 400', 'normal 700', 'italic 400', 'italic 700'].map(style =>
     doc.fonts.load(`${style} ${FORMAT.fontSize}px "${FORMAT.font}"`).then(faces => {
       if (!faces.length) throw new Error('The bundled Courier Prime font could not load. Reload to retry.');
-    })).concat(['400','700'].map(weight => doc.fonts.load(`${weight} ${FORMAT.fontSize}px \"ScriptForge Unicode\"`).then(faces=>{if(!faces.length)throw new Error('Unicode fallback font could not load.');})))).catch(error => { fontReady = null; throw new Error(`The bundled Courier Prime fonts could not load. Reload to retry. ${error.message}`, { cause: error }); });
+    })).concat(['normal 400','normal 700','italic 400','italic 700'].map(weight => doc.fonts.load(`${weight} ${FORMAT.fontSize}px \"ScriptForge Unicode\"`).then(faces=>{if(!faces.length)throw new Error('Unicode fallback font could not load.');})))).catch(error => { fontReady = null; throw new Error(`The bundled Courier Prime fonts could not load. Reload to retry. ${error.message}`, { cause: error }); });
   return fontReady;
 }
 /** WebKit can prepend a zero-width rectangle from the PREVIOUS line at a wrap. */

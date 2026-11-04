@@ -1,3 +1,5 @@
+import { prepareEmoji } from './emoji.js';
+import { inlineUnits } from './inline-layout.js';
 import { pdfTextWriter, validatePDFCharacters } from './pdf-unicode.js';
 import { needsUnicodeFont, UNICODE_SCALE } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
@@ -22,7 +24,14 @@ const printable = new Set(['titleField', 'scene', 'action', 'character', 'parent
 export function printableDocument(document) {
   const doc = structuredClone(document);
   const plain = nodes => nodes.map(node => ['note', 'boneyard'].includes(node.type) ? '' : node.children ? plain(node.children) : node.text).join('');
-  doc.elements = doc.elements.filter(el => printable.has(el.type)).map(el => ({ ...el, text: plain(parseInline(el.text)) }));
+  doc.elements = doc.elements.filter(el => printable.has(el.type)).map(el => {
+    const units=inlineUnits(el.text).filter(u=>!u.raw);let at=0;
+    const inlineStyles=[];for(const u of units){const start=at;at+=u.text.length;if(!u.bold&&!u.italic&&!u.underline)continue;
+      const previous=inlineStyles.at(-1);if(previous&&previous.end===start&&previous.bold===!!u.bold&&previous.italic===!!u.italic&&previous.underline===!!u.underline)previous.end=at;
+      else inlineStyles.push({start,end:at,bold:!!u.bold,italic:!!u.italic,underline:!!u.underline});
+    }
+    return {...el,text:plain(parseInline(el.text)),inlineStyles};
+  });
   return doc;
 }
 async function fontData(name, family = 'CourierPrime') {
@@ -33,10 +42,11 @@ async function fontData(name, family = 'CourierPrime') {
   return btoa(binary);
 }
 export async function createScreenplayPDF(document) {
-  const [PDF, regular, bold, unicode, unicodeBold] = await Promise.all([pdfLibrary(), fontData('Regular'), fontData('Bold'), fontData('', 'DejaVuSansMono'), fontData('Bold', 'DejaVuSansMono'), ensureScreenplayFonts()]);
+  const [PDF, regular, bold, unicode, unicodeBold,italic,boldItalic,unicodeItalic,unicodeBoldItalic] = await Promise.all([pdfLibrary(), fontData('Regular'), fontData('Bold'), fontData('', 'DejaVuSansMono'), fontData('Bold', 'DejaVuSansMono'),fontData('Italic'),fontData('BoldItalic'),fontData('Oblique','DejaVuSansMono'),fontData('BoldOblique','DejaVuSansMono'), ensureScreenplayFonts()]);
   const doc = printableDocument(document);
   const title = titlePageFields(doc);
   validatePDFCharacters(doc,title);
+  const emojiImages=await prepareEmoji([...doc.elements.map(el=>el.text),...Object.values(title)]);
   const measure = window.document.createElement('div'); measure.className = 'measurement pdf-measure'; measure.setAttribute('aria-hidden', 'true'); window.document.body.append(measure);
   let pages, baseline, boldBaseline, unicodeBaseline, unicodeBoldBaseline;
   try {
@@ -52,9 +62,13 @@ export async function createScreenplayPDF(document) {
   pdf.addFileToVFS('CourierPrime-Bold.ttf', bold); pdf.addFont('CourierPrime-Bold.ttf', 'CourierPrime', 'bold');
   pdf.addFileToVFS('DejaVuSansMono.ttf', unicode); pdf.addFont('DejaVuSansMono.ttf', 'ScriptForgeUnicode', 'normal');
   pdf.addFileToVFS('DejaVuSansMono-Bold.ttf', unicodeBold); pdf.addFont('DejaVuSansMono-Bold.ttf', 'ScriptForgeUnicode', 'bold');
+  for(const [filename,family,style,data]of [
+    ['CourierPrime-Italic.ttf','CourierPrime','italic',italic],['CourierPrime-BoldItalic.ttf','CourierPrime','bolditalic',boldItalic],
+    ['DejaVuSansMono-Oblique.ttf','ScriptForgeUnicode','italic',unicodeItalic],['DejaVuSansMono-BoldOblique.ttf','ScriptForgeUnicode','bolditalic',unicodeBoldItalic]
+  ]){pdf.addFileToVFS(filename,data);pdf.addFont(filename,family,style);}
   // jsPDF otherwise truncates each TTF advance to an integer in 1/1000 em,
   // accumulating a measurable drift across a full line. Preserve the real widths.
-  for (const face of ['CourierPrime','ScriptForgeUnicode']) for (const style of ['normal', 'bold']) {
+  for (const face of ['CourierPrime','ScriptForgeUnicode']) for (const style of ['normal', 'bold','italic','bolditalic']) {
     pdf.setFont(face, style);
     const metadata = pdf.getFont().metadata;
     // OpenType shaping makes combining marks non-advancing in the browser.
@@ -65,11 +79,11 @@ export async function createScreenplayPDF(document) {
     const glyphs = [...new Set(Object.values(metadata.cmap.unicode.codeMap))];
     metadata.Unicode.widths = glyphs.flatMap(glyph => [glyph, [metadata.widthOfGlyph(glyph)]]);
   }
-  pdf.setProperties({ title: doc.title, creator: 'ScriptForge' });
+  pdf.setProperties({ title: doc.title, creator: 'ScriptForge',subject:'Emoji artwork: Twemoji 17.0.3, Twitter, Inc. and contributors; CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ https://github.com/jdecked/twemoji' });
   const byId = new Map(doc.elements.map(el => [el.id, el]));
   const scale = .75;
   pdf.setFont('CourierPrime', 'normal'); pdf.setFontSize(12);
-  const {draw,wrap} = pdfTextWriter(pdf);
+  const {draw,wrap} = pdfTextWriter(pdf,emojiImages);
   const titleLines = wrap(title.title.toUpperCase(), 444);
   draw(titleLines, 306, 240, { align: 'center', baseline: 'top', lineHeightFactor: 1.25 });
   const creditY = 240 + titleLines.length * 15 + 36;
@@ -120,7 +134,7 @@ export async function createScreenplayPDF(document) {
           draw(model.sceneNumber, FORMAT.sceneNumberLeft * scale, textY, { bold, baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
           draw(model.sceneNumber, FORMAT.sceneNumberRight * scale, textY, { bold, align: 'right', baseline: 'alphabetic', tracking:FORMAT.letterSpacing*scale });
         }
-        if (text) draw(text, x * scale, textY, { align, baseline: 'alphabetic', bold, family:unicode?'unicode':'courier', tracking:FORMAT.letterSpacing*scale });
+        if (text) draw(text, x * scale, textY, { align, baseline: 'alphabetic', bold, family:unicode?'unicode':'courier', styles:model.inlineStyles?.filter(s=>s.end>line.start&&s.start<line.end).map(s=>({...s,start:Math.max(0,s.start-line.start),end:Math.min(text.length,s.end-line.start)})),italic:model.type==='lyric', tracking:FORMAT.letterSpacing*scale });
       }));
       item.more.forEach((more, col) => { if (more) marker('(MORE)', col, y + item.bodyHeight); });
       y += item.bodyHeight + item.moreHeight;

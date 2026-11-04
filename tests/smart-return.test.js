@@ -128,7 +128,7 @@ test('boundaries, empty elements and Shift Return retain established behaviour',
   }
   for (const [type,next] of [['character','dialogue'],['parenthetical','dialogue'],['action','action'],['dialogue','action']]) {
     const el=createElement(type,''),doc=createDocument({elements:[el]});
-    assert.equal(body(editDocument(doc,caret(el.id),{type:'enter'}))[0].type,next);
+    const result=body(editDocument(doc,caret(el.id),{type:'enter'}));assert.equal(result[0].type,type);assert.equal(result[1].type,next);
   }
 });
 

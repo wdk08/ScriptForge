@@ -3,7 +3,7 @@ Redistributed unmodified under the SIL Open Font License 1.1 in OFL.txt.
 Source: the open-font resources shipped with the installed WriterSolo app; this is the version embedded in the user-supplied reference PDF.
 Project: https://quoteunquoteapps.com/courierprime/
 
-DejaVu Sans Mono 2.37 (Regular and Bold) is redistributed unmodified as the
+DejaVu Sans Mono 2.37 (Regular, Bold, Oblique and Bold Oblique) is redistributed unmodified as the
 Unicode fallback. Original Bitstream copyright and DejaVu public-domain changes
 are retained in DejaVu-LICENSE.txt. This permits redistribution and PDF embedding.
 Official binary release: https://github.com/dejavu-fonts/dejavu-fonts/releases/tag/version_2_37
@@ -12,3 +12,5 @@ are recorded in js/unicode-font-data.js and checked by unit tests.
 Fallback glyphs are scaled by 1228/1233 to match Courier Prime's monospaced advance.
 Unmodified ASCII/Courier-supported paragraphs retain their original font and geometry.
 Unicode paragraphs use the same fallback choice in the editor, measurer and PDF.
+
+The additional unmodified Oblique faces use the same upstream archive (SHA-256 fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7).

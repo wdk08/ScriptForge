@@ -1,3 +1,4 @@
+import { renderInline, textPoint, inlineUnits } from './inline-layout.js';
 import { applyScreenplayFont } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
 import { automaticContinuations, continuedCue } from './continuations.js';
@@ -140,34 +141,43 @@ export function paginate(units, { contentHeight = PAGE.contentHeight, lineHeight
 export function createMeasurer(container) {
   const cache = new Map();
   return (el, dual = false, settings = {}) => {
-    const key = JSON.stringify([el.type, el.text, dual, el.rightMarginOffsetPt ?? 0, settings.boldSceneHeadings === true, el.type === 'scene' && settings.sceneNumbers === true && Boolean(el.sceneNumber)]);
+    const key = JSON.stringify([el.type, el.text, el.inlineStyles, dual, el.rightMarginOffsetPt ?? 0, settings.boldSceneHeadings === true, el.type === 'scene' && settings.sceneNumbers === true && Boolean(el.sceneNumber)]);
     if (cache.has(key)) return cache.get(key);
     const paragraph = document.createElement('div');
     paragraph.className = `screenplay-element ${CLASS_NAMES[el.type] ?? 'actionLine'} ${dual ? 'dualMeasure' : ''} ${transitionClass(el)}`;
     if (el.type === 'scene') paragraph.style.fontWeight = settings.boldSceneHeadings === true ? '700' : '400';
     applyScreenplayFont(paragraph, el.text, el.type === 'scene' && settings.boldSceneHeadings === true);
     paragraph.style.width = `${elementLayout(el, dual, 0, settings).width}px`;
-    const node = document.createTextNode(el.text + '\u200b');
-    paragraph.append(node); container.replaceChildren(paragraph);
+    renderInline(paragraph,el.text,0,el.text.length,{styles:el.inlineStyles});
+    paragraph.append(document.createTextNode('\u200b'));
+    const units=el.inlineStyles?(()=>{let at=0;return [...el.text].map(text=>{const start=at;at+=text.length;return{text,start};});})():inlineUnits(el.text);
+    const sourceOffsets=[];for(const unit of units)for(let i=0;i<unit.text.length;i++)sourceOffsets.push(unit.start+i);
+    const visible=[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(units.map(u=>u.text).join(''))].map(s=>sourceOffsets[s.index]);
+    visible.push(el.text.length); container.replaceChildren(paragraph);
     const range = document.createRange();
     const y = offset => {
-      range.setStart(node, offset); range.setEnd(node, offset + 1);
-      return textRangeRect(range).top;
+      const a=textPoint(paragraph,offset),b=textPoint(paragraph,Math.min(el.text.length+1,offset+1));
+      range.setStart(a.node,a.offset); range.setEnd(b.node,b.offset);
+      const emoji=b.node.parentElement?.closest('.screenplay-emoji');
+      const rect=emoji?.getBoundingClientRect()??textRangeRect(range),top=paragraph.getBoundingClientRect().top;
+      // Fonts have different ink bounds inside the same fixed line box.
+      return top+Math.round((rect.top-top)/PAGE.lineHeight)*PAGE.lineHeight;
     };
     const result = [];
     let start = 0;
     while (start <= el.text.length) {
       const top = y(start);
-      let lo = start, hi = el.text.length;
+      let lo = Math.max(0,visible.findIndex(at=>at>=start)), hi = visible.length-1;
       while (lo < hi) {
         const mid = Math.ceil((lo + hi) / 2);
-        if (Math.abs(y(mid) - top) < 1) lo = mid;
+        if (Math.abs(y(visible[mid]) - top) < 1) lo = mid;
         else hi = mid - 1;
       }
-      const end = Math.min(el.text.length, lo + 1);
+      const nextVisible=visible[lo+1];
+      const end = nextVisible??el.text.length;
       result.push({ start, end, height: PAGE.lineHeight });
-      if (lo >= el.text.length) break;
-      start = lo + 1;
+      if (nextVisible===undefined) break;
+      start = nextVisible;
     }
     // Prevent unbounded stale text measurements in long editing sessions.
     if (cache.size >= 3000) cache.delete(cache.keys().next().value);

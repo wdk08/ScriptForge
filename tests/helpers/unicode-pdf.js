@@ -6,7 +6,7 @@ export async function unicodePDFProof(page,testInfo){
   const load=name=>import(new URL(`./js/${name}.js`,location.href).href);
   const{createDocument,createElement}=await load('document'),{createScreenplayPDF}=await load('pdf-export'),{ensureScreenplayFonts}=await load('screenplay-format');await ensureScreenplayFonts();
   const{paginate,layoutUnits,createMeasurer}=await load('pagination'),{serializeFountain}=await load('fountain');
-  const text='Straight "quote" and apostrophe\' — “curly” ‘apostrophe’ – ellipsis… café naïve José Ω Ж ✓ → ♥ cafe\u0301. ';
+  const text='Straight "quote" and apostrophe\' — “curly” ‘apostrophe’ – ellipsis… café naïve José Ω Ж ✓ → ♥ cafe\u0301. 😏 👍🏽 🇺🇸 👩🏽‍💻 👨‍👩‍👧‍👦 ❤️ 1️⃣ 🦖 **Bold** *Italic* ***Both***. ';
   const doc=createDocument({title:'Unicode Ω',elements:[createElement('scene','INT. CAFÉ Ω - DAY',{sceneNumber:'125'}),createElement('character','VINCENT'),createElement('dialogue',text.repeat(24))]});doc.settings={sceneNumbers:true,boldSceneHeadings:true};
   const before=JSON.stringify(doc),fountain=serializeFountain(doc),host=document.createElement('div');host.className='measurement';document.body.append(host);
   const pages=paginate(layoutUnits(doc,createMeasurer(host)));host.remove();

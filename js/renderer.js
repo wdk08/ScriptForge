@@ -1,3 +1,4 @@
+import { renderInline } from './inline-layout.js';
 import { applyScreenplayFont } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
 import { CLASS_NAMES, PAGE } from './pagination.js';
@@ -34,7 +35,7 @@ function renderColumn(lines, byId, dual, settings) {
     fragment.setAttribute('aria-label', `${group.type === 'titleField' ? model.key : group.type} element`);
     let text = model.text.slice(group.start, group.end);
     if (group.end < model.text.length && text.endsWith('\n')) text = text.slice(0, -1);
-    if (text) fragment.append(document.createTextNode(text));
+    if (text) renderInline(fragment,model.text,group.start,group.start+text.length);
     if (!text || text.endsWith('\n')) {
       // A trailing newline alone has no native caret rectangle in Chromium.
       // This presentation-only anchor is never copied into the screenplay model.

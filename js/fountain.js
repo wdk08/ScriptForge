@@ -1,3 +1,4 @@
+import { inlinePlain } from './inline-layout.js';
 import { extendedCue } from './character-cues.js';
 import { createDocument, createElement, meaningfulContent, validateDocument } from './document.js';
 import { isCommonTransition } from './transitions.js';
@@ -79,7 +80,7 @@ function parseBody(source, options = {}) {
   const isBoundary = n => n === 0 || lines[n - 1].raw === '';
   function classify(n, dialogue) {
     const line = lines[n];
-    const text = line.visible.trim();
+    const text = inlinePlain(line.visible).trim();
     const afterBlank = n + 1 === lines.length || lines[n + 1].raw === '';
     if (line.raw === '') return 'whitespace';
     if (/^={3,}$/.test(text)) return 'pageBreak';
@@ -119,7 +120,7 @@ function parseBody(source, options = {}) {
       text = content.slice(line.start, lines[i - 1].end);
       inDialogue = false;
     } else if (type === 'scene') {
-      text = text.trim().replace(/^\.(?=[\p{L}\p{N}])/u, '');
+      text = text.trim().replace(/^\.(?=\S)/u, '');
       const number = text.match(/\s+#([\w.-]+)#\s*$/);
       if (number) { attrs.sceneNumber = number[1]; text = text.slice(0, number.index); }
       inDialogue = false;

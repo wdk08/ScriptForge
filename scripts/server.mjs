@@ -5,7 +5,7 @@ import { createLocalFiles } from './local-files.mjs';
 const base = resolve(new URL('..', import.meta.url).pathname);
 const port = Number(process.env.PORT ?? 4173);
 const localFiles = createLocalFiles({ configPath: resolve(base, '.scriptforge-local.json') });
-const mime = { '.mjs': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm', '.json': 'application/json', '.wav': 'audio/wav', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.fountain': 'text/plain; charset=utf-8', '.png': 'image/png' };
+const mime = { '.svg':'image/svg+xml', '.mjs': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm', '.json': 'application/json', '.wav': 'audio/wav', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.fountain': 'text/plain; charset=utf-8', '.png': 'image/png' };
 createServer(async (req, res) => {
   try {
     // Accept helper calls only from this exact loopback origin, with a custom

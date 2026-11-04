@@ -3,8 +3,8 @@ test.beforeEach(async({context})=>context.addInitScript(()=>{window.scriptForgeL
 test('Unicode PDF embeds real glyphs, extracts original text and matches editor pagination',async({page},testInfo)=>unicodePDFProof(page,testInfo));
 test('unsupported PDF glyph error includes code point and exact location',async({page})=>{
  await page.goto('/editor.html?new=1');await page.locator('#pages[contenteditable=true]').waitFor();
- const error=await page.evaluate(async()=>{const{createDocument,createElement}=await import('/js/document.js'),{createScreenplayPDF}=await import('/js/pdf-export.js');try{await createScreenplayPDF(createDocument({elements:[createElement('action','A 🦖 appears.')]}))}catch(e){return e.message}});
- expect(error).toMatch(/🦖.*U\+1F996.*action element 1.*line 1, column 3/);
+ const error=await page.evaluate(async()=>{const{createDocument,createElement}=await import('/js/document.js'),{createScreenplayPDF}=await import('/js/pdf-export.js');try{await createScreenplayPDF(createDocument({elements:[createElement('action','A \u{10ffff} appears.')]}))}catch(e){return e.message}});
+ expect(error).toMatch(/U\+10FFFF.*action element 1.*line 1, column 3/);
 });
 test('Tab recognizes the existing Action cue and gives the new parenthetical the caret',async({page})=>{
  await page.goto('/');await expect(page.locator('#new-screenplay')).toBeEnabled();

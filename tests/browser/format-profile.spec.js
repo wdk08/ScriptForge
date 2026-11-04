@@ -4,17 +4,17 @@ test('measured word wrapping preserves Unicode, whitespace, explicit breaks and 
   await page.goto('/editor.html?sample=1'); await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');
   const result = await page.evaluate(async () => {
     const {createMeasurer} = await import('/js/pagination.js'); const {elementColumn,textRangeRect} = await import('/js/screenplay-format.js');
-    const host=document.getElementById('measurement'),measure=createMeasurer(host);
+    const host=document.getElementById('measurement'),measure=createMeasurer(host);const{textPoint}=await import('/js/inline-layout.js');
     const samples=[['dialogue','Or... You be a dinosaur and I be a princess'],['action','She finally gets to the top of the playground and looks down at Luke'],
       ['dialogue',"Apostrophes aren't lost; hyphenated-word punctuation stays. ".repeat(4)],['action','Café — naïve résumé. '.repeat(8)],
       ['action','a'.repeat(180)],['dialogue','First line.\nSecond line.\n'],['action','👩🏽‍💻e\u0301'.repeat(80)],['action','  Spaces   remain intact.  '.repeat(8)]];
     const records=samples.map(([type,text])=>{
-      const lines=measure({type,text}),node=host.firstChild.firstChild,range=document.createRange();
+      const lines=measure({type,text}),paragraph=host.firstChild,range=document.createRange(),origin=paragraph.getBoundingClientRect().top;
       const sameRow=lines.every(line=>{
         let top=null;
         for(let at=line.start;at<line.end;at++){
-          if(text[at]==='\n')continue;range.setStart(node,at);range.setEnd(node,at+1);const rect=textRangeRect(range);
-          if(top==null)top=rect.top;else if(Math.abs(rect.top-top)>1)return false;
+          if(text[at]==='\n')continue;const a=textPoint(paragraph,at),b=textPoint(paragraph,at+1);range.setStart(a.node,a.offset);range.setEnd(b.node,b.offset);const emoji=b.node.parentElement?.closest('.screenplay-emoji'),rect=emoji?.getBoundingClientRect()??textRangeRect(range);
+          const row=Math.round((rect.top-origin)/16);if(top==null)top=row;else if(row!==top)return false;
         }return true;
       });
       return {text,parts:lines.map(l=>text.slice(l.start,l.end)),sameRow};

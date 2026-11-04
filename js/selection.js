@@ -1,3 +1,4 @@
+import { textPoint } from './inline-layout.js';
 import { editableElements, caret } from './editing.js';
 import { textRangeRect } from './screenplay-format.js';
 
@@ -28,13 +29,7 @@ export function restoreSelection(root, modelSelection, { scroll = false } = {}) 
     const sentinel = fragment.querySelector('[data-caret-sentinel]');
     if (sentinel && point.offset >= Number(fragment.dataset.end)) return { node: sentinel.firstChild, offset: 0, fragment };
     const offset = Math.min(fragment.textContent.length, Math.max(0, point.offset - Number(fragment.dataset.start)));
-    const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
-    let node, remaining = offset;
-    while ((node = walker.nextNode())) {
-      if (remaining <= node.length) return { node, offset: remaining, fragment };
-      remaining -= node.length;
-    }
-    return { node: fragment, offset: 0, fragment };
+    return { ...textPoint(fragment,offset), fragment };
   }
   const anchor = locate(modelSelection.anchor), focus = locate(modelSelection.focus);
   if (!anchor || !focus) return;
@@ -84,12 +79,12 @@ export function verticalCaret(root, pages, selection, direction, preferredX = nu
           ?? byId.get(line.id)?.find(el => line.start >= Number(el.dataset.start) && line.start <= Number(el.dataset.end));
         if (!fragment) continue;
         const sentinel = line.start === Number(fragment.dataset.end) ? fragment.querySelector('[data-caret-sentinel]') : null;
-        const node = sentinel?.firstChild ?? fragment.firstChild;
+        const node = sentinel?.firstChild ?? fragment;
         const base = sentinel ? line.start : Number(fragment.dataset.start);
         let rect;
-        if (node?.nodeType === Node.TEXT_NODE) {
-          const offset = Math.min(node.length, line.start - base);
-          const range = document.createRange(); range.setStart(node, offset); range.setEnd(node, Math.min(node.length, offset + 1)); rect = textRangeRect(range);
+        if (node) {
+          const a=sentinel?{node,offset:0}:textPoint(fragment,line.start-base), b=sentinel?a:textPoint(fragment,Math.min(Number(fragment.dataset.end)-base,line.start-base+1));
+          const range = document.createRange(); range.setStart(a.node,a.offset); range.setEnd(b.node,b.offset); rect = textRangeRect(range);
         } else rect = fragment.getBoundingClientRect();
         entries.push({ ...line, node, base, fragment, column: col, dual: item.kind === 'dual', top: contentTop(rect.top), left: contentLeft(rect.left) });
       }
@@ -101,8 +96,8 @@ export function verticalCaret(root, pages, selection, direction, preferredX = nu
     ?? cache.entries.findLast(line => line.id === point.id);
   if (!current) return { selection, preferredX };
   const caretRange = document.createRange();
-  if (current.node?.nodeType === Node.TEXT_NODE) {
-    caretRange.setStart(current.node, Math.min(current.node.length, point.offset - current.base));
+  if (current.node) {
+    const p=textPoint(current.fragment,point.offset-current.base);caretRange.setStart(p.node,p.offset);
     caretRange.collapse(true);
   } else caretRange.selectNodeContents(current.fragment);
   const x = preferredX ?? contentLeft(caretRange.getBoundingClientRect().left);
@@ -111,19 +106,44 @@ export function verticalCaret(root, pages, selection, direction, preferredX = nu
   const target = candidates[0];
   if (!target) return { selection, preferredX: x };
   let offset = target.start;
-  if (target.node?.nodeType === Node.TEXT_NODE) {
+  if (target.node) {
     const range = document.createRange();
     let lo = target.start - target.base;
-    let hi = Math.min(target.node.length, target.end - target.base);
+    let hi = target.end - target.base;
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2);
-      range.setStart(target.node, mid); range.setEnd(target.node, mid);
+      const p=textPoint(target.fragment,mid);range.setStart(p.node,p.offset);range.setEnd(p.node,p.offset);
       if (contentLeft(range.getBoundingClientRect().left) <= x) lo = mid;
       else hi = mid - 1;
     }
     offset = target.base + lo;
     // The newline belongs to the line before it, not the next visual line.
-    if (target.node.textContent[offset - target.base - 1] === '\n') offset--;
+    if (target.fragment.textContent[offset - target.base - 1] === '\n') offset--;
   }
   return { selection: caret(target.id, offset), preferredX: x };
+}
+
+/** Hit-test the actual glyph ranges in viewport coordinates (already include CSS zoom).
+ * Native contenteditable block hit-testing can choose a different line from its ink.
+ * Only single, undragged clicks use this; native drag/double-click selection remains intact.
+ */
+export function visualClickCaret(root,x,y) {
+ let best=null;
+ for(const fragment of root.querySelectorAll('[data-element-id]')) {
+  const box=fragment.getBoundingClientRect(),zoom=box.width/parseFloat(fragment.style.width||box.width);
+  if(y<box.top-8*zoom||y>box.bottom+8*zoom||x<box.left-4*zoom||x>box.right+4*zoom)continue;
+  const start=Number(fragment.dataset.start),end=Number(fragment.dataset.end),text=fragment.textContent.replace(/\u200b$/,'');
+  const walker=document.createTreeWalker(fragment,NodeFilter.SHOW_TEXT);let node,base=0;
+  while((node=walker.nextNode())) {
+   const rawBase=base;base+=node.length;if(node.parentElement.closest('[data-inline-marker],[data-caret-sentinel]'))continue;
+   for(const {segment,index} of new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(node.textContent)){
+    const range=document.createRange();range.setStart(node,index);range.setEnd(node,index+segment.length);
+    const emoji=node.parentElement.closest('.screenplay-emoji');const rect=emoji?.getBoundingClientRect()??textRangeRect(range);if(!rect.width||!rect.height)continue;
+    const dy=Math.max(rect.top-y,y-rect.bottom,0),dx=Math.max(rect.left-x,x-rect.right,0),distance=dy*dy*16+dx*dx;
+    if(!best||distance<best.distance){const after=x>(rect.left+rect.right)/2;best={distance,selection:caret(fragment.dataset.elementId,Math.min(end,start+rawBase+index+(after?segment.length:0)))};}
+   }
+  }
+  if(!text&&y>=box.top&&y<=box.bottom){const dx=Math.abs(x-box.left);if(!best||dx*dx<best.distance)best={distance:dx*dx,selection:caret(fragment.dataset.elementId,start)};}
+ }
+ return best?.selection??null;
 }

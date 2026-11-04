@@ -87,7 +87,13 @@
       const cueResult=cueHistory.apply(cueHistory.current.selection,{type:'tab'});
       assert(cueResult.document.elements.filter(el=>el.type==='character').length===1 && cueResult.document.elements[0].id===cueDoc.elements[0].id && cueResult.document.elements.find(el=>el.type==='parenthetical')?.text==='()' && cueResult.selection.focus.offset===1,'native Tab preserves the existing cue and focuses one parenthetical');
       cueHistory.undo();assert(cueHistory.current.document.elements[0].type==='action','native cue Tab undo restores Action');cueHistory.redo();
-      const unicodeText='Straight "quote" and apostrophe\' — “curly” ‘apostrophe’ – ellipsis… café naïve José Ω Ж ✓ → ♥ cafe\u0301. ';
+      const blankDoc=createDocument({elements:[createElement('action','')]}),blankHistory=new EditorHistory(blankDoc,caret(blankDoc.elements[0].id));
+      for(let i=0;i<3;i++)blankHistory.apply(blankHistory.current.selection,{type:'enter'});
+      const {fountainForSaving}=await import('/js/session.js');
+      assert(parseFountain(fountainForSaving(blankHistory.current.document)).elements.filter(el=>el.type==='action'&&!el.text).length===4,'native blank Returns survive Fountain save/reopen');
+      const {toggleInline,inlinePlain}=await import('/js/inline-layout.js');
+      const formatted=toggleInline('Native emphasis',0,6,'bold');assert(inlinePlain(formatted.text)==='Native emphasis'&&formatted.text.startsWith('**Native**'),'native emphasis uses Fountain without losing text');
+      const unicodeText='Straight "quote" and apostrophe\' — “curly” ‘apostrophe’ – ellipsis… café naïve José Ω Ж ✓ → ♥ cafe\u0301. 😏 👍🏽 🇺🇸 👩🏽‍💻 👨‍👩‍👧‍👦 ❤️ 1️⃣ 🦖 **Bold** *Italic* ***Both***. ';
       const unicodeDoc=createDocument({title:'Unicode Ω',elements:[createElement('scene','INT. CAFÉ Ω - DAY',{sceneNumber:'125'}),createElement('character','VINCENT'),createElement('dialogue',unicodeText.repeat(24))]});unicodeDoc.settings={boldSceneHeadings:true,sceneNumbers:true};
       const unicodeBefore=JSON.stringify(unicodeDoc),unicodeHost=document.createElement('div');unicodeHost.className='measurement';document.body.append(unicodeHost);
       const unicodePages=paginate(layoutUnits(unicodeDoc,createMeasurer(unicodeHost)));unicodeHost.remove();
