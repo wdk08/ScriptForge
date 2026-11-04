@@ -37,7 +37,14 @@ export function restoreSelection(root, modelSelection, { scroll = false } = {}) 
   window.getSelection().setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
   if (scroll) {
     const range = document.createRange(); range.setStart(focus.node, focus.offset); range.collapse(true);
-    const rect = range.getBoundingClientRect();
+    const glyphRect = range.getBoundingClientRect();
+    const emoji=focus.node.parentElement?.closest('.screenplay-emoji[data-emoji-renderer="native"]');
+    const box=emoji?.getBoundingClientRect();
+    // Native color-font ink metrics can exceed the fixed screenplay line box.
+    const rect=box?{top:box.top,bottom:box.bottom,height:box.height,left:glyphRect.left,right:glyphRect.right}:glyphRect;
+    // A transient/zero-size native caret is not a viewport coordinate.
+    // Keep the actual selection and writing location until it is measurable.
+    if(!Number.isFinite(rect.top)||rect.height<=0)return;
     const viewport = root.closest('.document-viewport');
     if (viewport) {
       const bounds = viewport.getBoundingClientRect();

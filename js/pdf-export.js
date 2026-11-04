@@ -50,7 +50,7 @@ export async function createScreenplayPDF(document) {
   const measure = window.document.createElement('div'); measure.className = 'measurement pdf-measure'; measure.setAttribute('aria-hidden', 'true'); window.document.body.append(measure);
   let pages, baseline, boldBaseline, unicodeBaseline, unicodeBoldBaseline;
   try {
-    pages = paginate(layoutUnits(doc, createMeasurer(measure)));
+    pages = paginate(layoutUnits(doc, createMeasurer(measure,{emojiRenderer:'pdf'})));
     baseline = fontBaseline(measure); boldBaseline = fontBaseline(measure, FORMAT.fontSize, FORMAT.lineHeight, true);
     unicodeBaseline = fontBaseline(measure, FORMAT.fontSize*UNICODE_SCALE, FORMAT.lineHeight, false, 'ScriptForge Unicode');
     unicodeBoldBaseline = fontBaseline(measure, FORMAT.fontSize*UNICODE_SCALE, FORMAT.lineHeight, true, 'ScriptForge Unicode');

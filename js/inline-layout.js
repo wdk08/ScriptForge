@@ -1,5 +1,5 @@
 import { parseInline } from './inline.js';
-import { emojiKey, emojiURL, EMOJI_WIDTH } from './emoji.js';
+import { emojiKey, emojiURL, EMOJI_WIDTH, isEmojiCluster } from './emoji.js';
 /** Source offsets remain Fountain offsets, even when emphasis delimiters are hidden. */
 export function inlineUnits(source) {
  const units=[];let at=0;
@@ -46,7 +46,7 @@ export function insertInline(source,start,end,text,styles) {
  units.splice(from,to-from,...inserted);const result=serializeUnits(units);return{text:result.source,offset:inserted.length?result.ends[from+inserted.length-1]:result.offsets[from]};
 }
 /** Preserve source characters in hidden nodes; DOM/model offsets and copy remain lossless. */
-export function renderInline(host,source,start=0,end=source.length,{plain=false,styles=null}={}) {
+export function renderInline(host,source,start=0,end=source.length,{plain=false,styles=null,emojiRenderer='native'}={}) {
  const units=styles?(()=>{let at=0;return [...source].map(text=>{const start=at;at+=text.length;return{...styles.find(s=>start>=s.start&&start<s.end),text,start,end:at};});})():plain?[...source].map((text,index)=>({text,start:index,end:index+text.length})):inlineUnits(source);
  let at=start, group=[],groupStyle=null;
  const flush=()=>{if(!group.length)return;const span=document.createElement('span');const style=groupStyle;
@@ -54,10 +54,10 @@ export function renderInline(host,source,start=0,end=source.length,{plain=false,
   const text=group.map(u=>u.text).join('');
   // Emoji spans retain real Unicode text for native selection, accessibility and IME.
   const segments=[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text)];
-  if(!style.bold&&!style.italic&&!style.underline&&!segments.some(s=>emojiKey(s.segment))){host.append(document.createTextNode(text));group=[];return;}
+  if(!style.bold&&!style.italic&&!style.underline&&!segments.some(s=>emojiRenderer==='pdf'?emojiKey(s.segment):isEmojiCluster(s.segment))){host.append(document.createTextNode(text));group=[];return;}
   let plainText='';const plainFlush=()=>{if(plainText){span.append(document.createTextNode(plainText));plainText='';}};
-  for(const {segment} of segments){const key=emojiKey(segment);if(!key){plainText+=segment;continue;}plainFlush();
-   const emoji=document.createElement('span');emoji.className='screenplay-emoji';emoji.style.backgroundImage=`url("${emojiURL(key)}")`;emoji.style.width=`${EMOJI_WIDTH}px`;emoji.textContent=segment;span.append(emoji);
+  for(const {segment} of segments){const key=emojiKey(segment),isEmoji=emojiRenderer==='pdf'?Boolean(key):isEmojiCluster(segment);if(!isEmoji){plainText+=segment;continue;}plainFlush();
+   const emoji=document.createElement('span');emoji.className='screenplay-emoji';emoji.dataset.emojiRenderer=emojiRenderer;if(emojiRenderer==='pdf')emoji.style.backgroundImage=`url("${emojiURL(key)}")`;emoji.style.width=`${EMOJI_WIDTH}px`;emoji.textContent=segment;span.append(emoji);
   }plainFlush();host.append(span);group=[];
  };
  const hidden=text=>{flush();if(!text)return;const span=document.createElement('span');span.dataset.inlineMarker='';span.style.display='none';span.textContent=text;host.append(span);};
@@ -71,7 +71,7 @@ export function renderInline(host,source,start=0,end=source.length,{plain=false,
 }
 export function textPoint(host,offset) {
  const walker=document.createTreeWalker(host,NodeFilter.SHOW_TEXT);let node,last,remaining=offset;
- while((node=walker.nextNode())){if(!node.parentElement.closest('[data-inline-marker]'))last=node;if(remaining<=node.length&&!node.parentElement.closest('[data-inline-marker]'))return{node,offset:Math.max(0,remaining)};remaining-=node.length;}
+ while((node=walker.nextNode())){if(!node.parentElement.closest('[data-inline-marker]'))last=node;if(remaining<=node.length&&!node.parentElement.closest('[data-inline-marker]')&&!(remaining===node.length&&node.parentElement.closest('.screenplay-emoji')))return{node,offset:Math.max(0,remaining)};remaining-=node.length;}
  return last?{node:last,offset:last.length}:{node:host,offset:0};
 }
 

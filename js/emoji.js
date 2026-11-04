@@ -7,7 +7,10 @@ export function emojiKey(text) {
  if (!/\p{Emoji_Presentation}|\ufe0f|\u20e3/u.test(text)) return null;
  return EMOJI.has(exact)?exact:EMOJI.has(normalized)?normalized:null;
 }
-export const emojiURL = key => new URL(`../assets/emoji/svg/${key}.svg`, import.meta.url).href;
+const artworkBase=new URL('../assets/emoji/svg/',import.meta.url);
+// Vite may normalize a directory asset URL without its trailing slash.
+artworkBase.pathname=artworkBase.pathname.replace(/\/?$/,'/');
+export const emojiURL = key => new URL(`${key}.svg`,artworkBase).href;
 export const EMOJI_WIDTH = 2*(16*1228/2048-.3);
 const images=new Map();
 export async function prepareEmoji(texts) {
@@ -20,3 +23,6 @@ export async function prepareEmoji(texts) {
  }
  return images;
 }
+
+// Native editor presentation is independent of the finite PDF artwork catalog.
+export function isEmojiCluster(text){return !text.includes('\ufe0e') && (/\p{Emoji_Presentation}/u.test(text) || (/[\ufe0f\u20e3\u200d]/u.test(text) && /\p{Extended_Pictographic}|[0-9#*]/u.test(text)));}

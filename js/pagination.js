@@ -138,7 +138,7 @@ export function paginate(units, { contentHeight = PAGE.contentHeight, lineHeight
 }
 
 /** Browser DOM measurement, cached per text/type/column width. No line-count guesses. */
-export function createMeasurer(container) {
+export function createMeasurer(container,{emojiRenderer='native'}={}) {
   const cache = new Map();
   return (el, dual = false, settings = {}) => {
     const key = JSON.stringify([el.type, el.text, el.inlineStyles, dual, el.rightMarginOffsetPt ?? 0, settings.boldSceneHeadings === true, el.type === 'scene' && settings.sceneNumbers === true && Boolean(el.sceneNumber)]);
@@ -148,7 +148,7 @@ export function createMeasurer(container) {
     if (el.type === 'scene') paragraph.style.fontWeight = settings.boldSceneHeadings === true ? '700' : '400';
     applyScreenplayFont(paragraph, el.text, el.type === 'scene' && settings.boldSceneHeadings === true);
     paragraph.style.width = `${elementLayout(el, dual, 0, settings).width}px`;
-    renderInline(paragraph,el.text,0,el.text.length,{styles:el.inlineStyles});
+    renderInline(paragraph,el.text,0,el.text.length,{styles:el.inlineStyles,emojiRenderer});
     paragraph.append(document.createTextNode('\u200b'));
     const units=el.inlineStyles?(()=>{let at=0;return [...el.text].map(text=>{const start=at;at+=text.length;return{text,start};});})():inlineUnits(el.text);
     const sourceOffsets=[];for(const unit of units)for(let i=0;i<unit.text.length;i++)sourceOffsets.push(unit.start+i);

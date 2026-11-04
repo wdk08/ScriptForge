@@ -1,3 +1,4 @@
+import { isEmojiCluster } from './emoji.js';
 import { renderInline } from './inline-layout.js';
 import { applyScreenplayFont } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
@@ -36,7 +37,7 @@ function renderColumn(lines, byId, dual, settings) {
     let text = model.text.slice(group.start, group.end);
     if (group.end < model.text.length && text.endsWith('\n')) text = text.slice(0, -1);
     if (text) renderInline(fragment,model.text,group.start,group.start+text.length);
-    if (!text || text.endsWith('\n')) {
+    if (!text || text.endsWith('\n') || (group.end===model.text.length && isEmojiCluster([...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text)].at(-1)?.segment??''))) {
       // A trailing newline alone has no native caret rectangle in Chromium.
       // This presentation-only anchor is never copied into the screenplay model.
       const sentinel = document.createElement('span'); sentinel.dataset.caretSentinel = '';
