@@ -1,5 +1,5 @@
 import { visualClickCaret } from './selection.js';
-import { inlineUnits } from './inline-layout.js';
+import { inlineUnits, adjacentInlineOffset } from './inline-layout.js';
 import {createWritingController} from './writing-controller.js';
 import {setupWritingStatistics} from './writing-statistics.js';
 import { flushForUpdate } from './update-safety.js';
@@ -381,9 +381,8 @@ root.addEventListener('keydown', event => {
     } else {
       const el = history.current.document.elements.find(el => el.id === selection.focus.id);
       const at = selection.focus.offset;
-      const within = direction < 0 ? at > 0 : at < el.text.length;
-      const step = within ? direction < 0 ? [...el.text.slice(0, at)].at(-1).length : [...el.text.slice(at)][0].length : 0;
-      const target = within ? caret(el.id, at + direction * step) : adjacentCaret(history.current.document, selection, direction);
+      const offset=adjacentInlineOffset(el.text,at,direction);
+      const target = offset!==null ? caret(el.id, offset) : adjacentCaret(history.current.document, selection, direction);
       currentSelection = event.shiftKey ? { anchor: selection.anchor, focus: target.focus } : target;
     }
     restoreSelection(root, currentSelection, { scroll: true });

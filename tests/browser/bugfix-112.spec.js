@@ -36,5 +36,14 @@ for(const zoom of [.65,1,1.5])test(`visible glyph center clicks, native drag/dou
    await page.mouse.click(point.x,point.y);const selected=await page.evaluate(async()=>{const{readSelection}=await import('/js/selection.js');return readSelection(document.getElementById('pages'))});expect(selected?.focus.id).toBe(el.id);expect(selected.focus.offset).toBe(at);
   }}
  const action=page.locator(`[data-element-id="${doc.elements[1].id}"]`);await action.scrollIntoViewIfNeeded();const box=await action.boundingBox();await page.mouse.dblclick(box.x+30*zoom,box.y+8*zoom);expect(await page.evaluate(()=>window.getSelection().toString().trim())).toBe('ordinary');
- await page.mouse.move(box.x+1,box.y+8*zoom);await page.mouse.down();await page.mouse.move(box.x+90*zoom,box.y+8*zoom,{steps:8});await page.mouse.up();expect((await page.evaluate(()=>window.getSelection().toString())).length).toBeGreaterThan(3);
+ await page.evaluate(()=>getSelection().removeAllRanges());const drag=await action.boundingBox();await page.mouse.move(drag.x+2,drag.y+8*zoom);await page.mouse.down();await page.waitForTimeout(60);await page.mouse.move(drag.x+90*zoom,drag.y+8*zoom,{steps:8});await page.waitForTimeout(20);await page.mouse.up();expect((await page.evaluate(()=>window.getSelection().toString())).length).toBeGreaterThan(3);
+});
+
+test('Arrow keys cross hidden emphasis boundaries and compound emoji without getting stuck',async({page})=>{
+ const doc=await seed(page,[['action','Before.'],['action','**ABC**'],['action','After 👩🏽‍💻.']]),id=doc.elements[1].id;
+ await select(page,id,2);await page.keyboard.press('ArrowLeft');expect(await page.evaluate(()=>window.scriptForge.getSelection().focus.id)).toBe(doc.elements[0].id);
+ await select(page,id,5);await page.keyboard.press('ArrowRight');expect(await page.evaluate(()=>window.scriptForge.getSelection().focus.id)).toBe(doc.elements[2].id);
+ await select(page,id,2);await page.keyboard.press('ArrowRight');await page.keyboard.type('x');expect(await page.evaluate(()=>window.scriptForge.getDocument().elements[1].text)).toBe('**AxBC**');
+ await page.keyboard.press('Backspace');expect(await page.evaluate(()=>window.scriptForge.getDocument().elements[1].text)).toBe('**ABC**');
+ const last=doc.elements[2];await select(page,last.id,6);await page.keyboard.press('ArrowRight');expect(await page.evaluate(()=>window.scriptForge.getSelection().focus.offset)).toBe(13);await page.keyboard.press('Backspace');expect(await page.evaluate(()=>window.scriptForge.getDocument().elements[2].text)).toBe('After .');
 });

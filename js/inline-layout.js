@@ -72,3 +72,14 @@ export function textPoint(host,offset) {
  while((node=walker.nextNode())){if(!node.parentElement.closest('[data-inline-marker]'))last=node;if(remaining<=node.length&&!node.parentElement.closest('[data-inline-marker]'))return{node,offset:Math.max(0,remaining)};remaining-=node.length;}
  return last?{node:last,offset:last.length}:{node:host,offset:0};
 }
+
+/** Visible grapheme boundaries expressed in the original Fountain source offsets. */
+export function inlineGraphemes(source) {
+ const units=inlineUnits(source),starts=[],ends=[];let text='';
+ for(const u of units){text+=u.text;for(let i=0;i<u.text.length;i++){starts.push(u.raw?u.start+i:u.end-u.text.length+i);ends.push(u.raw?u.start+i+1:u.end-u.text.length+i+1);}}
+ return [...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text)].map(({segment,index})=>({text:segment,start:starts[index],end:ends[index+segment.length-1]}));
+}
+export function adjacentInlineOffset(source,offset,direction) {
+ const units=inlineGraphemes(source),unit=direction<0?units.findLast(u=>u.start<offset):units.find(u=>u.end>offset);
+ return unit?(direction<0?unit.start:unit.end):null;
+}

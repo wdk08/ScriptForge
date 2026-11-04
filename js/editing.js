@@ -1,4 +1,4 @@
-import { toggleInline, insertInline, inlineUnits, inlinePlain, serializeUnits } from './inline-layout.js';
+import { toggleInline, insertInline, inlineUnits, inlinePlain, serializeUnits, inlineGraphemes } from './inline-layout.js';
 import { cueIdentity, extendedCue } from './character-cues.js';
 import { rightMarginBounds } from './right-margins.js';
 import { dualElementIds } from './document.js';
@@ -284,8 +284,8 @@ export function editDocument(document, selection, command) {
           previous: range.elements[range.first - 1], following: range.elements[range.last + 1],
           characters: doc.elements.filter(item => item.type === 'character').map(item => item.text) });
         let beforeText=before,afterText=text;
-        if(!enclosed&&inlineUnits(el.text).some(u=>u.bold||u.italic||u.underline)){
-          const left=inlineUnits(el.text).filter(u=>u.end<=range.start.offset),right=inlineUnits(last.text).filter(u=>u.start>=range.end.offset);
+        if(inlineUnits(el.text).some(u=>u.bold||u.italic||u.underline)){
+          const left=inlineUnits(el.text).filter(u=>u.end<=(enclosed?Math.max(1,range.start.offset):range.start.offset)),right=inlineUnits(last.text).filter(u=>u.start>=(enclosed?Math.min(range.end.offset,last.text.length-1):range.end.offset)&&(!enclosed||u.end<=last.text.length-1));
           beforeText=serializeUnits(left).source;afterText=serializeUnits(right).source;
         }
         const added = createElement(type, afterText);
@@ -323,16 +323,15 @@ export function editDocument(document, selection, command) {
       if (el.type === 'parenthetical' && blankLine(el, el.text) && el.text) {
         el.text = ''; next = caret(el.id); break;
       }
-      if ((backwards && at > 0) || (!backwards && at < el.text.length)) {
-        // Delete a full Unicode code point rather than half a surrogate pair.
-        const count = backwards ? [...el.text.slice(0, at)].at(-1).length : [...el.text.slice(at)][0].length;
-        const start = backwards ? at - count : at;
+      const units=inlineGraphemes(el.text),unit=backwards?units.findLast(u=>u.start<at):units.find(u=>u.end>at);
+      if (unit) {
+        const start=unit.start,count=unit.end-unit.start;
         if(inlineUnits(el.text).some(u=>u.bold||u.italic||u.underline)){
-          const units=inlineUnits(el.text).filter(u=>!u.raw),u=backwards?[...units].reverse().find(u=>u.start<at):units.find(u=>u.end>at);
-          if(u){const result=insertInline(el.text,u.start,u.end,'');el.text=result.text;next=caret(el.id,result.offset);break;}
+          const result=insertInline(el.text,unit.start,unit.end,'');el.text=result.text;next=caret(el.id,result.offset);
+        }else{
+          el.text = el.text.slice(0, start) + el.text.slice(start + count);
+          next = clearEmptyParenthetical(doc, caret(el.id, start));
         }
-        el.text = el.text.slice(0, start) + el.text.slice(start + count);
-        next = clearEmptyParenthetical(doc, caret(el.id, start));
       } else {
         const other = range.elements[range.first + (backwards ? -1 : 1)];
         if (other) {
