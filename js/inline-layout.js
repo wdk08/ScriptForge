@@ -29,15 +29,17 @@ export function serializeUnits(units) {
  offsets.push(source.length);for(let j=stack.length-1;j>=0;j--)source+=marker[stack[j]];
  return {source,offsets,ends};
 }
-export function toggleInline(source,start,end,style) {
+export function toggleInline(source,start,end,style,force) {
  const units=inlineUnits(source);const a=units.findIndex(u=>u.end>start), b=units.findIndex(u=>u.start>=end);
  const from=a<0?units.length:a,to=b<0?units.length:b;
- const selected=units.slice(from,to).filter(u=>!u.raw&&u.text.trim());const enabled=!selected.length||!selected.every(u=>u[style]);
+ const selected=units.slice(from,to).filter(u=>!u.raw&&u.text.trim());const enabled=force??(!selected.length||!selected.every(u=>u[style]));
  for(let i=from;i<to;i++)if(!units[i].raw)units[i][style]=enabled;
  const result=serializeUnits(units);return{text:result.source,start:result.offsets[from],end:to>from?result.ends[to-1]:result.offsets[to]};
 }
 export function insertInline(source,start,end,text,styles) {
- const units=inlineUnits(source),a=units.findIndex(u=>u.end>start),b=units.findIndex(u=>u.start>=end);
+ const units=inlineUnits(source);
+ if(units.some(u=>u.raw&&((start>u.start&&start<u.end)||(end>u.start&&end<u.end))))return{text:source.slice(0,start)+text+source.slice(end),offset:start+text.length};
+ const a=units.findIndex(u=>u.end>start),b=units.findIndex(u=>u.start>=end);
  const from=a<0?units.length:a,to=b<0?units.length:b;
  const active=styles??units[from]??units[from-1]??{};
  const inserted=[...text].map(text=>({text,bold:active.bold,italic:active.italic,underline:active.underline}));

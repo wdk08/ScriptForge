@@ -41,6 +41,18 @@ function replaceRange(doc, selection, insertion = '') {
   if(first===last && inlineUnits(first.text).some(u=>u.bold||u.italic||u.underline)){
     const result=insertInline(first.text,offset,range.end.offset,insertion);first.text=result.text;return caret(first.id,result.offset);
   }
+  if(range.first!==range.last){
+    const left=inlineUnits(first.text),right=inlineUnits(last.text),marked=[...left,...right].some(u=>u.bold||u.italic||u.underline);
+    const partialNote=[...left.filter(u=>u.raw&&u.start<offset&&u.end>offset),...right.filter(u=>u.raw&&u.start<range.end.offset&&u.end>range.end.offset)].length;
+    if(marked&&!partialNote){
+      const prefix=left.filter(u=>u.end<=offset),suffix=right.filter(u=>u.start>=range.end.offset),style=prefix.at(-1)??left.find(u=>u.end>offset)??{};
+      const typed=[...insertion].map(text=>({text,bold:style.bold,italic:style.italic,underline:style.underline})),all=[...prefix,...typed,...suffix],result=serializeUnits(all);
+      const at=prefix.length+typed.length,caretOffset=at?result.ends[at-1]:result.offsets[0];
+      const begin=doc.elements.indexOf(first),end=doc.elements.indexOf(last);
+      if(offset===0&&range.end.offset<last.text.length){last.text=result.source;doc.elements.splice(begin,end-begin);return caret(last.id,caretOffset);}
+      first.text=result.source;doc.elements.splice(begin+1,end-begin);return caret(first.id,caretOffset);
+    }
+  }
   if (range.first !== range.last && offset === 0 && range.end.offset < last.text.length) {
     // The first paragraph was entirely selected. Its format must not be
     // transferred onto surviving speech (or other text) from the last paragraph.
@@ -256,10 +268,16 @@ export function editDocument(document, selection, command) {
       break;
     }
     case 'inlineFormat': {
-      for(const item of range.elements.slice(range.first,range.last+1)){
+      const bounds=item=>{
         let a=item.id===range.start.id?range.start.offset:0,b=item.id===range.end.id?range.end.offset:item.text.length;
         if(item.type==='parenthetical'&&item.text.startsWith('(')&&item.text.endsWith(')')){a=Math.max(1,a);b=Math.min(item.text.length-1,b);}
-        const result=toggleInline(item.text,a,b,command.style);item.text=result.text;
+        return{a,b};
+      };
+      const selected=range.elements.slice(range.first,range.last+1).flatMap(item=>{const{a,b}=bounds(item);return inlineUnits(item.text).filter(u=>!u.raw&&u.text.trim()&&u.end>a&&u.start<b);});
+      const force=!selected.length||!selected.every(u=>u[command.style]);
+      for(const item of range.elements.slice(range.first,range.last+1)){
+        const{a,b}=bounds(item);
+        const result=toggleInline(item.text,a,b,command.style,force);item.text=result.text;
         if(item.id===range.start.id)next.anchor={id:item.id,offset:result.start};
         if(item.id===range.end.id)next.focus={id:item.id,offset:result.end};
       }break;

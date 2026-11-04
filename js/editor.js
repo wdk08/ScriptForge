@@ -353,7 +353,7 @@ root.addEventListener('keydown', event => {
     const at = selection.focus.offset, direction = event.key === 'ArrowLeft' ? -1 : 1;
     const text = direction < 0 ? el.text.slice(0, at) : el.text.slice(at);
     const length = direction < 0 ? text.match(/\S*\s*$/)?.[0].length ?? 0 : text.match(/^\s*\S*/)?.[0].length ?? 0;
-    const target = length ? caret(el.id, at + direction * length) : adjacentCaret(history.current.document, selection, direction);
+    const target = length && adjacentInlineOffset(el.text,at,direction)!==null ? caret(el.id, at + direction * length) : adjacentCaret(history.current.document, selection, direction);
     currentSelection = event.shiftKey ? { anchor: selection.anchor, focus: target.focus } : target;
     restoreSelection(root, currentSelection, { scroll: true }); return;
   }

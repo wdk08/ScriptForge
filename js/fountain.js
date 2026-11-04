@@ -206,7 +206,10 @@ export function serializeFountain(doc, { canonical = false } = {}) {
       const attached = ['dialogue', 'parenthetical'].includes(el.type)
         && ['character', 'dialogue', 'parenthetical', 'lyric'].includes(previousMeaningful?.type);
       const titleAttached = el.type === 'titleField' && previousMeaningful?.type === 'titleField';
-      const needed = previousMeaningful && !attached && !titleAttached ? 2 : previousMeaningful ? 1 : 0;
+      const blankAction=previousMeaningful?.type!=='titleField'&&((el.type==='action'&&!el.text.trim())||(previousMeaningful?.type==='action'&&!previousMeaningful.text.trim()));
+      // Forced empty Action lines already carry intentional vertical space.
+      // Consecutive ! blocks need a newline, not another paragraph separator.
+      const needed = previousMeaningful && !attached && !titleAttached && !blankAction ? 2 : previousMeaningful ? 1 : 0;
       append(newline.repeat(Math.max(0, needed - endings)) + encode(el, newline) + newline);
     }
     else if (el.source && el.source.baseline === signature(el)) append(el.source.raw);
