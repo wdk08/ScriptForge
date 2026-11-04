@@ -57,7 +57,7 @@ test('first creation chooses a stored folder, writes a file, autosaves, and surv
 
 test('unsupported directory access uses recovery and never repeatedly prompts', async ({ page }) => {
   await page.addInitScript(() => { window.showDirectoryPicker = undefined; window.showSaveFilePicker = undefined; });
-  await page.goto('/'); await page.locator('#screenplay-folder').click();
+  await page.goto('/'); await expect(page.locator('#new-screenplay')).toBeEnabled(); await page.locator('#screenplay-folder').click();
   await expect(page.locator('#folder-dialog')).toContainText('does not support directory access');
   await page.locator('#folder-close').click();
   await page.locator('#new-screenplay').click(); await expect(page.locator('.screenplay-page')).toBeVisible();
