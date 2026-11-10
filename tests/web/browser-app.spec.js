@@ -9,9 +9,9 @@ test('production subpath supports editing, persistence, statistics, exports and 
  await page.locator('#new-screenplay').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');
  await page.locator('#pages').click();await page.keyboard.type('A browser story.');await page.waitForTimeout(1100);
  await page.evaluate(()=>window.scriptForgeBeforeClose());const original=await page.evaluate(()=>window.scriptForge.getDocument());
- await page.reload();await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');
+ await page.reload();await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');
  expect((await page.evaluate(()=>window.scriptForge.getDocument())).elements).toEqual(original.elements);
- await expect(page.locator('#disk-save-state')).toContainText(/Recovery|Unsaved|exported/);
+ await expect(page.locator('#disk-save-state')).toContainText(/Saved/);
  await page.locator('.tools-menu summary').click();await page.locator('#writing-statistics').click();await expect(page.locator('.writing-statistics')).toContainText('Current session');await expect(page.locator('.writing-statistics')).toContainText('Words typed');await page.screenshot({path:'/tmp/scriptforge-110-writing-statistics.png'});await page.locator('.writing-statistics button',{hasText:'Close'}).click();
  for(const id of ['export-fountain','export-pdf']){await page.locator('.export-menu:not(.browser-download) summary').click();const pending=page.waitForEvent('download');await page.locator(`#${id}`).click();const download=await pending;expect(download.suggestedFilename()).toMatch(id==='export-pdf'?/\.pdf$/:/\.fountain$/);}
  await page.locator('.browser-download summary').click();await expect(page.locator('.browser-download a')).toHaveCount(3);
@@ -27,7 +27,7 @@ test('writing history resumes after Home and statistics clearing preserves scree
  const first=await page.evaluate(()=>window.scriptForge.getDocument().id);await page.locator('#pages').click();await page.keyboard.type('Three simple words');await page.locator('#home').click();await expect(page).toHaveURL(/\/ScriptForge\/index.html$/);
  const read=()=>page.evaluate(async()=>await(await import('./js/writing-storage.js')).createWritingStore().list());
  const before=await read();expect(before).toHaveLength(1);expect(before[0].segments).toHaveLength(1);expect(before[0].segments[0].typed).toBe(3);expect(before[0].pausedAt).not.toBeNull();
- await page.goto(`./editor.html?id=${first}`);await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');await page.locator('#home').click();await expect(page).toHaveURL(/\/ScriptForge\/index.html$/);
+ await page.goto(`./editor.html?id=${first}`);await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');await page.locator('#home').click();await expect(page).toHaveURL(/\/ScriptForge\/index.html$/);
  const after=await read();expect(after).toHaveLength(1);expect(after[0].id).toBe(before[0].id);expect(after[0].segments).toHaveLength(2);
  await page.locator('#writing-statistics').click();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Clear writing statistics…'}).click();await expect.poll(async()=> (await read()).length).toBe(0);
  expect(await page.evaluate(async id=>Boolean(await(await import('./js/storage.js')).repository.get(id)),first)).toBe(true);

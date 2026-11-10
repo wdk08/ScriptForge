@@ -1,5 +1,5 @@
 import { toggleInline, insertInline, inlineUnits, inlinePlain, serializeUnits, inlineGraphemes } from './inline-layout.js';
-import { cueIdentity, extendedCue } from './character-cues.js';
+import { cueIdentity, extendedCue, trainedCue } from './character-cues.js';
 import { rightMarginBounds } from './right-margins.js';
 import { dualElementIds } from './document.js';
 import { toggleContinuation } from './continuations.js';
@@ -10,7 +10,7 @@ import { createElement, validateDocument, dialogueGroups } from './document.js';
 import { screenplaySettings, changeScreenplaySettings, redoSceneNumbers } from './screenplay-settings.js';
 import { hasScenePrefix, completeSceneLocation } from './scene-locations.js';
 import { renameCharacter } from './characters.js';
-import { isCommonTransition } from './transitions.js';
+import { isBuiltInTransition, isTrainedTransition } from './transitions.js';
 
 export const EDIT_TYPES = ['scene', 'action', 'character', 'parenthetical', 'dialogue', 'transition'];
 export const editableElements = doc => doc.elements.filter(el => !['whitespace', 'pageBreak', 'titleField'].includes(el.type));
@@ -122,7 +122,7 @@ function recognizeCharacter(doc, el, selection) {
   const index = doc.elements.indexOf(el);
   const known = dialogueGroups(doc).some(group => doc.elements.indexOf(group.character) < index
     && key(group.character.text) === key(name) && group.elements.some(item => item.type === 'dialogue' && item.text.trim()));
-  if (!known && !extendedCue(line.text)) return { el, selection };
+  if (!known && !trainedCue(line.text) && !extendedCue(line.text)) return { el, selection };
   const prefix = el.text.slice(0, line.start).replace(/\n$/, '');
   const suffix = el.text.slice(line.end).replace(/^\n/, '');
   let cue = el;
@@ -205,11 +205,11 @@ function recognizeTypedScene(doc, selection, original, originalSelection) {
   return caret(scene.id, Math.max(0, selection.focus.offset - line.start - leading));
 }
 
-function recognizeTypedTransition(doc, selection) {
+function recognizeTypedTransition(doc, selection, complete = false) {
   const el = doc.elements.find(item => item.id === selection.focus.id);
   if (el?.type !== 'action') return selection;
   const line = lineAt(el.text, selection.focus.offset);
-  if (!isCommonTransition(inlinePlain(line.text))) return selection;
+  if (!(complete ? isTrainedTransition : isBuiltInTransition)(inlinePlain(line.text))) return selection;
   const prefix = el.text.slice(0, line.start).replace(/\n$/, '');
   const suffix = el.text.slice(line.end).replace(/^\n/, '');
   let transition = el;
@@ -256,6 +256,10 @@ export function editDocument(document, selection, command) {
     && range.start.offset === el.text.length - 1;
   const smartReturn = command.type === 'enter' && (!collapsed
     || (range.start.offset > 0 && range.start.offset < el.text.length && !parentheticalEnd));
+  if (collapsed && !smartReturn && ['enter', 'tab'].includes(command.type) && range.start.offset === lineAt(el.text, range.start.offset).end) {
+    next = recognizeTypedTransition(doc, next, true);
+    el = doc.elements.find(item => item.id === next.focus.id);
+  }
   switch (command.type) {
     case 'rightMargin': {
       if (!command.reset && ![5,-5].includes(command.delta)) throw new TypeError('Margins change by exactly five points.');

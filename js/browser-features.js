@@ -25,9 +25,9 @@ export function setupBrowserFeatures(environment=window){
    for(const [key,label] of [['macArm','macOS — Apple Silicon'],['macIntel','macOS — Intel'],['windows','Windows — x64']]){const a=document.createElement('a');a.textContent=label;a.href=links[key];a.rel='noopener';options.append(a);}loaded=true;
   }catch(error){options.replaceChildren();const text=document.createElement('p');text.textContent=`${error.message} Close and reopen Download to retry.`;const a=document.createElement('a');a.textContent='View published releases';a.href='https://github.com/wdk08/ScriptForge/releases';a.target='_blank';a.rel='noopener';options.append(text,a);}finally{busy=false;}
  });
- const notice=document.createElement('p');notice.className='browser-storage-note';notice.textContent='Browser recovery stays in this browser on this device. Clearing website data can erase it. Export Fountain files for separate backups; browser storage does not sync between devices.';
+ const notice=document.createElement('p');notice.className='browser-storage-note';notice.textContent='Your local library stays in this browser on this device. Clearing website data can erase your screenplays. Export Fountain files for separate backups; browser storage does not sync between devices.';
  const footer=document.querySelector('.library-footer');
- if(footer)footer.append(notice);else{const label=document.querySelector('.session-note');if(label){label.textContent='Browser recovery · Export for backup';label.title=notice.textContent;}}
+ if(footer)footer.append(notice);else{const label=document.querySelector('.session-note');if(label){label.textContent='Browser library · Export for backup';label.title=notice.textContent;}}
  // This asks for persistence without any directory picker or recurring file dialogs.
  void environment.navigator.storage?.persist?.().catch(()=>{});
 }

@@ -4,22 +4,6 @@ test.beforeEach(async ({ page }) => { await page.addInitScript(() => { window.sh
 
 const source = 'Title: Selected Film\n\nINT. STUDIO - DAY\n\nThe selected screenplay appears.\n';
 
-test('a readable picker handle that cannot be cloned still opens the selected Fountain file', async ({ page }) => {
-  const errors = []; page.on('pageerror', error => { errors.push(error.message); console.log('Browser error:', error.message); });
-  await page.addInitScript(source => {
-    // Embedded browsers may return a readable handle that IndexedDB cannot clone.
-    window.showOpenFilePicker = async () => [{ name: 'selected.fountain', getFile: async () => new File([source], 'selected.fountain'), isSameEntry: async () => false }];
-  }, source);
-  await page.goto('/'); await page.locator('#open-fountain').click();
-  await expect(page.locator('#pages')).toContainText('The selected screenplay appears.');
-  await expect(page.locator('#document-banner')).toContainText('file reference');
-  await page.locator('#home').click();
-  await expect(page.locator('.card-title')).toHaveText('Selected Film');
-  await page.locator('.card-title').click();
-  await expect(page.locator('#pages')).toContainText('The selected screenplay appears.');
-  expect(errors).toEqual([]);
-});
-
 test('three consecutive new screenplays commit unique IDs and appear when returning Home', async ({ page }) => {
   const errors = []; page.on('pageerror', error => { errors.push(error.message); console.log('Browser error:', error.message); });
   await page.goto('/'); const ids = [];
@@ -55,19 +39,12 @@ test('creation recovers after a browser closes its cached IndexedDB connection',
   await page.locator('#home').click(); await expect(page.locator('.script-card')).toHaveCount(1);
 });
 
-test('permission and storage errors stay visible, leave prior records intact, and allow retry', async ({ page }) => {
-  await page.addInitScript(() => {
-    window.showOpenFilePicker = async () => { throw new DOMException('File permission denied', 'NotAllowedError'); };
-  });
+test('storage errors stay visible, leave prior records intact, and allow retry', async ({ page }) => {
   await page.goto('/'); await page.locator('#new-screenplay').click();
   await expect(page.locator('.screenplay-page')).toBeVisible();
   const id = await page.evaluate(() => window.scriptForge.getDocument().id);
   await page.locator('#home').click();
   await expect(page.locator('.script-card')).toHaveCount(1);
-  await page.locator('#open-fountain').click();
-  await expect(page.locator('#library-error')).toContainText('File permission denied');
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.locator('#library-error')).toContainText('File permission denied');
   await page.evaluate(async () => {
     const { repository } = await import('/js/storage.js');
     const put = repository.put;
@@ -142,7 +119,7 @@ test('Home arrow loads recents when storage reads take longer than the refresh t
   await page.keyboard.type('A draft for navigation.');
   await expect(page.locator('#pages')).toContainText('A draft for navigation.');
   await page.locator('#home').click(); await expect(page.locator('.script-card')).toHaveCount(1);
-  await page.locator('.card-title').click(); await page.locator('#recover-changes').click();
+  await page.locator('.card-title').click(); await page.locator('#pages[contenteditable=true]').waitFor();
   await expect(page.locator('.screenplay-page')).toBeVisible();
   await page.route('**/js/home.js', async route => {
     const response = await route.fetch();
@@ -179,7 +156,7 @@ test('ten imports survive saves, Home navigation, same files, large copies and i
   for(let i=0;i<10;i++) {
     const source=`Title: Stress ${i}\n\n`+Array.from({length:i===5?100:2},(_,n)=>`INT. ROOM ${n} - DAY\n\nImport stability proof. ${'Action. '.repeat(30)}\n\nANN\nHello there.\n`).join('\n');
     const chooserPromise=page.waitForEvent('filechooser');
-    await page.locator('#import-copy').click();
+    await page.locator('#open-fountain').click();
     await (await chooserPromise).setFiles({name:i%2?'repeated.fountain':`stress-${i}.fountain`,mimeType:'text/plain',buffer:Buffer.from(source)});
     await expect(page.locator('#pages')).toContainText('Import stability proof.');
     ids.push(await page.evaluate(()=>window.scriptForge.getDocument().id));
@@ -188,9 +165,9 @@ test('ten imports survive saves, Home navigation, same files, large copies and i
   }
   expect(new Set(ids).size).toBe(10);
   const invalidChooser=page.waitForEvent('filechooser');
-  await page.locator('#import-copy').click();
+  await page.locator('#open-fountain').click();
   await (await invalidChooser).setFiles({name:'invalid.fountain',mimeType:'text/plain',buffer:Buffer.from('bad\0binary')});
   await expect(page.locator('#library-error')).toContainText('binary');await expect(page.locator('.script-card')).toHaveCount(10);
-  await page.goto(`/editor.html?id=${ids[0]}`);await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toContainText('Edited');
+  await page.goto(`/editor.html?id=${ids[0]}`);await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toContainText('Edited');
   expect(errors).toEqual([]);
 });

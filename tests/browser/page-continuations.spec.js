@@ -39,7 +39,9 @@ test('page continuations preserve text, extensions, manual overrides, and every 
  expect(await page.evaluate(()=>window.scriptForge.getDocument())).toEqual(before);
  // Replace only the dialogue spanning all page fragments, through normal editing.
  await page.evaluate(()=>{const pieces=[...document.querySelectorAll('[data-type=dialogue]')],first=pieces[0],last=pieces.at(-1),range=document.createRange();document.getElementById('pages').focus();range.setStart(first.firstChild,0);range.setEnd(last.firstChild,last.firstChild.length);getSelection().removeAllRanges();getSelection().addRange(range);});
- await page.keyboard.insertText('Short.');await expect(page.locator('.page-more')).toHaveCount(0);await expect(page.locator('.page-continuation')).toHaveCount(0);
+ await page.keyboard.insertText('Short.');
+ await expect(page.locator('#large-deletion-dialog')).toBeVisible(); await page.keyboard.press('Enter');
+ await expect(page.locator('.page-more')).toHaveCount(0);await expect(page.locator('.page-continuation')).toHaveCount(0);
  expect((await page.evaluate(()=>window.scriptForge.getDocument())).elements.find(e=>e.type==='dialogue').text).toBe('Short.');
 });
 test('dual speech stays side by side and marks only the still-speaking column',async({page})=>{

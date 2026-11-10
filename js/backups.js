@@ -31,7 +31,7 @@ export class IndexedDBBackupStore {
   async database() {
     if (!this.connection) this.connection = new Promise((resolve, reject) => {
       if (!this.indexedDB) { reject(new Error('Backup storage is unavailable.')); return; }
-      const request = this.indexedDB.open('scriptforge-backups', 1);
+      const request = this.indexedDB.open((globalThis.scriptForgeDiagnosticDatabasePrefix ?? '') + 'scriptforge-backups', 1);
       let settled = false;
       const fail = error => { if (settled) return; settled = true; clearTimeout(timer); reject(error); };
       const timer = setTimeout(() => fail(new Error('Backup storage did not respond.')), 8000);

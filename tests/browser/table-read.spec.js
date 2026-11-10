@@ -10,7 +10,7 @@ async function screenplay(page, { long = false } = {}) {
     ];
     return (await repository.put(draftRecord(createDocument({ title: 'The Table Read', elements })))).id;
   }, { long });
-  await page.goto(`/editor.html?id=${id}`); await page.locator('#recover-changes').click(); await expect(page.locator('#pages')).toContainText('NOAH'); return id;
+  await page.goto(`/editor.html?id=${id}`); await page.locator('#pages[contenteditable=true]').waitFor(); await expect(page.locator('#pages')).toContainText('NOAH'); return id;
 }
 async function launch(page) { await page.locator('.tools-menu summary').click(); await page.locator('#simulate-table-read').click(); await expect(page.locator('#table-read-dialog')).toBeVisible(); await expect(page.locator('#tr-preference-status')).not.toContainText('Loading'); }
 async function active(page) { return page.evaluate(() => { const u = window.speechMock.active; return u ? { text: u.text, voice: u.voice?.name, rate: u.rate, pitch: u.pitch, volume: u.volume } : null; }); }
@@ -59,7 +59,7 @@ test('voice settings persist across reopening and reload, remain per script, and
   await expect(page.locator('#tr-preference-status')).toContainText('saved'); await page.locator('#tr-close').click(); await expect(page.locator('#table-read-dialog')).not.toBeVisible();
   const after = await page.evaluate(async id => { const { repository } = await import('/js/storage.js'); const { fountainForSaving } = await import('/js/session.js'); return { record: await repository.get(id), source: fountainForSaving(window.scriptForge.getDocument()) }; }, id);
   expect(after).toEqual(before);
-  page.on('dialog', dialog => dialog.accept()); await page.reload(); await page.locator('#recover-changes').click(); await launch(page);
+  page.on('dialog', dialog => dialog.accept()); await page.reload(); await page.locator('#pages[contenteditable=true]').waitFor(); await launch(page);
   await expect(page.locator('#tr-read-headings')).toBeChecked(); await expect(page.locator('#tr-speed')).toHaveValue('1.5'); await expect(page.getByLabel('Pitch for Narrator', { exact: true })).toHaveValue('0.8');
   expect(await page.getByLabel('Voice for NOAH', { exact: true }).inputValue()).toContain('test:alex');
   await page.locator('#tr-close').click(); await expect(page.locator('#table-read-dialog')).not.toBeVisible();

@@ -8,7 +8,8 @@ A local screenplay writing room for drafting, formatting, saving, and reading sc
 - Automatic pagination, smart Return/Tab, screenplay formatting, undo/redo, and keyboard shortcuts.
 - Dual dialogue, continuation markers, scene numbering and individual right margins.
 - Scene navigation, location autocomplete, character renaming, find/replace and statistics.
-- Local folder saving, recovery snapshots and independent version-history backups.
+- Automatic local library, recovery snapshots and independent version-history backups.
+- Trained transitions and dialogue tags, a customizable Profanity Analyzer, and confirmation for large deletions.
 - Table reads with browser voices and compatible imported Piper ONNX models.
 - Focus Mode, Light Mode and Dark Mode.
 - Desktop Help → Check for Updates and About ScriptForge with the installed version.
@@ -27,9 +28,7 @@ Older development installations without an updater need a manual first installat
 
 ## Saving and data
 
-Choose **Screenplay Folder** for new Fountain files. Existing linked files continue saving in their original locations. Autosave updates the linked file; Export creates a separate copy. Resolve save/permission/conflict warnings before updating.
-
-Screenplay files live in selected external folders. Native grants and backups use the operating system's app-data directory for `com.scriptforge.desktop`; recovery, preferences, imported models and table-read settings use WebView IndexedDB. These locations are separate from replaceable application assets. Keep independent device backups; recovery does not protect against device loss or clearing application/browser data.
+ScriptForge autosaves the structured screenplay in its local library. Native apps store screenplays in the platform application-data directory. The browser uses IndexedDB. Existing linked files stay intact during migration. Export creates a separate Fountain or PDF copy. See [local storage, migration and PDF emoji](docs/LOCAL-LIBRARY.md).
 
 ## Development
 
@@ -40,7 +39,7 @@ npm ci
 npm start
 ```
 
-Open [localhost:4173](http://localhost:4173), rather than opening HTML files directly. Browser folder access depends on browser support; desktop builds use native picker-granted file access.
+Open [localhost:4173](http://localhost:4173), rather than opening HTML files directly. Use [the isolated Dev commands](docs/DEVELOPMENT.md) for interactive browser and native testing.
 
 ```sh
 npm run desktop:dev

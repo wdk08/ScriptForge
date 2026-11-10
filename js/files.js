@@ -27,6 +27,8 @@ export async function readFountainFile(file) {
 
 export function createFileService(environment = globalThis) {
   const bridge = createLocalBridge(environment);
+  const browserDev = environment.scriptForgeDev && !bridge.native;
+  const devDiskError = () => { throw new Error('Browser Dev uses isolated recovery only. Use native ScriptForge Dev for sandboxed disk saves, or Export a copy.'); };
   const types = [{ description: 'Fountain screenplay', accept: { 'text/plain': ['.fountain', '.txt'] } }];
   const pickerOptions = { types, multiple: false, id: 'scriptforge' };
   async function ensurePermission(handle, mode = 'read', request = false) {
@@ -58,15 +60,16 @@ export function createFileService(environment = globalThis) {
     return { kind: 'download', name, hash: null, source };
   }
   return {
-    supportsHandles: bridge.native || typeof environment.showOpenFilePicker === 'function',
-    supportsSavePicker: bridge.native || typeof environment.showSaveFilePicker === 'function',
+    supportsHandles: !browserDev && (bridge.native || typeof environment.showOpenFilePicker === 'function'),
+    supportsSavePicker: !browserDev && (bridge.native || typeof environment.showSaveFilePicker === 'function'),
     ready: bridge.ready,
     get usesDesktop() { return bridge.native; },
     get usesLocalHelper() { return bridge.available; },
     restoreHandle: bridge.hydrate,
-    get supportsDirectories() { return typeof environment.showDirectoryPicker === 'function' || bridge.available; },
-    pickDirectory: () => bridge.available ? bridge.call('choose-folder').then(bridge.hydrate) : environment.showDirectoryPicker({ id: 'scriptforge-folder', startIn: 'documents', mode: 'readwrite' }),
+    get supportsDirectories() { return !browserDev && (typeof environment.showDirectoryPicker === 'function' || bridge.available); },
+    pickDirectory: () => browserDev ? devDiskError() : bridge.available ? bridge.call('choose-folder').then(bridge.hydrate) : environment.showDirectoryPicker({ id: 'scriptforge-folder', startIn: 'documents', mode: 'readwrite' }),
     async createInFolder(directory, source, title, id) {
+      if (browserDev) devDiskError();
       directory = bridge.hydrate(directory);
       await ensurePermission(directory, 'readwrite', false);
       if (directory.localHelper) { const result = await bridge.call('create', { handle: directory, source, title }); return { ...result, kind: 'file', handle: bridge.hydrate(result.handle) }; }
@@ -87,6 +90,7 @@ export function createFileService(environment = globalThis) {
       return environment.navigator?.locks ? environment.navigator.locks.request('scriptforge-new-file', create) : create();
     },
     async retireRenamedFile(directory, oldFile) {
+      if (browserDev) devDiskError();
       directory = bridge.hydrate(directory);
       await ensurePermission(directory, 'readwrite', false);
       if (directory.localHelper) {
@@ -104,13 +108,14 @@ export function createFileService(environment = globalThis) {
       await directory.removeEntry(oldFile.name);
     },
     ensurePermission,
+    importCopy: async () => bridge.native ? bridge.call('import-file') : upload(),
     async open({ importCopy = false } = {}) {
       await bridge.ready;
       if (bridge.native || (!importCopy && bridge.available)) {
         const result = await bridge.call('open-file');
         return { ...result, handle: importCopy ? null : bridge.hydrate(result.handle) };
       }
-      if (importCopy || typeof environment.showOpenFilePicker !== 'function') return upload();
+      if (browserDev || importCopy || typeof environment.showOpenFilePicker !== 'function') return upload();
       const [handle] = await environment.showOpenFilePicker(pickerOptions);
       return { ...await readFountainFile(await handle.getFile()), handle };
     },
@@ -119,10 +124,11 @@ export function createFileService(environment = globalThis) {
       if (handle.localHelper) return { ...await bridge.call('read', { handle }), handle: bridge.hydrate(handle) };
       return { ...await readFountainFile(await handle.getFile()), handle };
     },
-    pickSave: title => typeof environment.showSaveFilePicker === 'function'
+    pickSave: title => !browserDev && typeof environment.showSaveFilePicker === 'function'
       ? environment.showSaveFilePicker({ ...pickerOptions, suggestedName: fountainFilename(title) })
       : Promise.resolve(null),
     async write(handle, source, { expectedHash = null, request = false, allowNewDestination = false } = {}) {
+      if (browserDev) devDiskError();
       handle = bridge.hydrate(handle);
       if (handle.localHelper) {
         // The helper validates its grant, checks the expected hash before and

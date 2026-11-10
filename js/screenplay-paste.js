@@ -1,4 +1,4 @@
-import { cueIdentity, extendedCue } from './character-cues.js';
+import { cueIdentity, extendedCue, trainedCue } from './character-cues.js';
 import { createElement } from './document.js';
 import { parseFountain } from './fountain.js';
 import { hasScenePrefix, sceneLocation } from './scene-locations.js';
@@ -51,7 +51,7 @@ export function classifyReturnFragment(text, { originalType, before, previous, f
   // split cue is also usually a word fragment, rather than another character.
   const speechContext = ['character', 'dialogue', 'parenthetical', 'lyric'].includes(originalType);
   const finishedHeading = originalType === 'scene' && Boolean(sceneLocation(before)?.qualifier);
-  const allowCue = !speechContext && (known || finishedHeading || following?.type === 'dialogue');
+  const allowCue = !speechContext && (known || trainedCue(candidate) || finishedHeading || following?.type === 'dialogue');
   let type = classifyScreenplayLine(text, { allowCue, allowParenthetical: true, names,
     inDialogue: originalType === 'dialogue', fallback: 'action',
     allowTransition: originalType !== 'dialogue' || candidate === candidate.toUpperCase() });

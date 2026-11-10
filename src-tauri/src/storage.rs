@@ -76,7 +76,7 @@ fn staged(path: &Path, bytes: &[u8]) -> Result<NamedTempFile> {
     file.as_file().sync_all()?;
     Ok(file)
 }
-fn atomic_replace(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn atomic_replace(path: &Path, bytes: &[u8]) -> Result<()> {
     let file = staged(path, bytes)?;
     if let Ok(metadata) = fs::metadata(path) {
         file.as_file().set_permissions(metadata.permissions())?;
@@ -85,13 +85,13 @@ fn atomic_replace(path: &Path, bytes: &[u8]) -> Result<()> {
         .map_err(|error| Failure::from(error.error))?;
     sync_parent(path)
 }
-fn exclusive(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn exclusive(path: &Path, bytes: &[u8]) -> Result<()> {
     staged(path, bytes)?
         .persist_noclobber(path)
         .map_err(|error| Failure::from(error.error))?;
     sync_parent(path)
 }
-fn plain_file(path: &Path) -> Result<Value> {
+pub(crate) fn plain_file(path: &Path) -> Result<Value> {
     let info = fs::metadata(path)?;
     if !info.is_file() || info.len() > 20 * 1024 * 1024 {
         return Err(Failure::new(
@@ -135,6 +135,7 @@ struct Grants {
 pub struct NativeFiles {
     root: PathBuf,
     config: Grants,
+    sandbox: Option<PathBuf>,
 }
 impl NativeFiles {
     pub fn new(root: PathBuf) -> Result<Self> {
@@ -145,10 +146,37 @@ impl NativeFiles {
         } else {
             Grants::default()
         };
-        Ok(Self { root, config })
+        Ok(Self { root, config, sandbox: None })
+    }
+    pub fn restrict_to(&mut self, directory: PathBuf) -> Result<()> {
+        fs::create_dir_all(&directory)?;
+        let canonical = fs::canonicalize(directory)?;
+        if !canonical.starts_with(fs::canonicalize(&self.root)?) {
+            return Err(Failure::new("FilePermissionError", "The Dev sandbox cannot point outside Dev application data."));
+        }
+        self.sandbox = Some(canonical);
+        Ok(())
+    }
+    fn check_sandbox(&self, path: &Path) -> Result<()> {
+        if self.sandbox.as_ref().is_some_and(|root| !path.starts_with(root)) {
+            return Err(Failure::new("FilePermissionError", "ScriptForge Dev only writes inside its isolated sandbox. Import a copy instead."));
+        }
+        Ok(())
+    }
+    pub fn import_copy(&mut self, path: &Path) -> Result<Value> {
+        let original = plain_file(path)?;
+        let root = self.sandbox.as_ref().ok_or_else(|| Failure::new("Error", "A Dev sandbox is required."))?;
+        let name = format!("{}-{}", Uuid::new_v4(), path.file_name().unwrap_or_default().to_string_lossy());
+        let destination = root.join(name);
+        exclusive(&destination, original["source"].as_str().unwrap().as_bytes())?;
+        let handle = self.grant(destination, "file")?;
+        let mut result = self.run("read", &json!({"handle": handle}))?;
+        result["handle"] = handle;
+        Ok(result)
     }
     pub fn grant(&mut self, path: PathBuf, kind: &str) -> Result<Value> {
         let path = fs::canonicalize(path)?;
+        self.check_sandbox(&path)?;
         if kind == "file" {
             check_plain_extension(&path)?;
         }
@@ -197,6 +225,7 @@ impl NativeFiles {
                 "The selected path changed. Select it again.",
             ));
         }
+        self.check_sandbox(&grant.path)?;
         let path = if grant.kind == "file" {
             if kind != "file" {
                 return Err(Failure::new(
@@ -436,6 +465,7 @@ impl NativeBackups {
     }
 }
 /// Export destinations are selected separately from autosave and always use an OS save dialog.
+pub fn export_dev_copy(path: &Path, bytes: &[u8]) -> Result<()> { exclusive(path, bytes) }
 pub fn export_file(path: &Path, bytes: &[u8]) -> Result<()> {
     if let Ok(info) = fs::symlink_metadata(path) {
         if info.file_type().is_symlink() {
@@ -471,6 +501,26 @@ pub fn export_file(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dev_sandbox_imports_copies_and_refuses_external_grants() {
+        let root = tempfile::tempdir().unwrap();
+        let production = root.path().join("production.fountain");
+        fs::write(&production, "Original production text").unwrap();
+        let sandbox = root.path().join("dev/appdata/sandbox/screenplays");
+        let mut files = NativeFiles::new(root.path().join("dev/appdata")).unwrap();
+        files.restrict_to(sandbox.clone()).unwrap();
+        assert!(files.grant(production.clone(), "file").is_err());
+        assert!(files.grant(root.path().to_path_buf(), "directory").is_err());
+        let copied = files.import_copy(&production).unwrap();
+        files.run("write", &json!({"handle":copied["handle"],"source":"Dev edits","expectedHash":copied["hash"]})).unwrap();
+        assert_eq!(fs::read_to_string(&production).unwrap(), "Original production text");
+        assert_eq!(files.run("read", &json!({"handle":copied["handle"]})).unwrap()["source"], "Dev edits");
+        #[cfg(unix)] {
+            let link = sandbox.join("escape.fountain");
+            std::os::unix::fs::symlink(&production, &link).unwrap();
+            assert!(files.grant(link, "file").is_err());
+        }
+    }
     #[test]
     fn file_lifecycle_permissions_conflicts_and_restart() {
         let root = tempfile::tempdir().unwrap();

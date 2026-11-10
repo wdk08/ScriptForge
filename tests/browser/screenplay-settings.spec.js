@@ -32,7 +32,7 @@ test('per-script settings persist, default unchecked, show numbers without modif
   await page.keyboard.press('ControlOrMeta+Shift+z'); await expect(page.locator('[data-scene-number]')).toHaveCount(2);
   await expect.poll(() => page.evaluate(() => window.scriptForge.getFileState().recoveryCurrent)).toBe(true);
   await page.locator('#home').click(); await expect(page.locator('.script-card')).toHaveCount(1);
-  await page.locator('.card-title').click(); await page.locator('#recover-changes').click();
+  await page.locator('.card-title').click(); await page.locator('#pages[contenteditable=true]').waitFor();
   await expect(page.locator('[data-type="scene"]').first()).toHaveCSS('font-weight', '700');
   await page.locator('#screenplay-settings').click(); await expect(page.locator('#scene-numbers')).toBeChecked();
   await page.screenshot({ path: 'test-results/screenplay-settings.png' });
@@ -48,7 +48,7 @@ test('Redo Numbers repairs imported numbers, edits keep them sequential, and PDF
     const { parseFountain } = await import('/js/fountain.js'); const { draftRecord } = await import('/js/session.js'); const { repository } = await import('/js/storage.js');
     return (await repository.put(draftRecord(parseFountain('INT. ROOM - DAY #9#\n\nAn empty room.\n\nEXT. ROAD - DAY #9#\n\nA car waits.')))).id;
   });
-  await page.goto(`/editor.html?id=${id}`); await page.locator('#recover-changes').click(); await expect(page.locator('[data-type="scene"]')).toHaveCount(2);
+  await page.goto(`/editor.html?id=${id}`); await page.locator('#pages[contenteditable=true]').waitFor(); await expect(page.locator('[data-type="scene"]')).toHaveCount(2);
   await page.locator('#screenplay-settings').click(); await page.locator('#redo-scene-numbers').click();
   expect(await page.evaluate(() => window.scriptForge.getDocument().elements.filter(el => el.type === 'scene').map(el => el.sceneNumber))).toEqual(['1', '2']);
   await page.locator('#scene-numbers').check(); await page.locator('#settings-done').click();

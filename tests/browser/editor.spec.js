@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
 
 test('initial browser render, accurate Letter pages, dual layout and no runtime errors', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.reload(); await page.locator('#recover-changes').click(); await expect(page.locator('.dualDialogue')).toHaveCount(1);
+  await page.reload(); await page.locator('#pages[contenteditable=true]').waitFor(); await expect(page.locator('.dualDialogue')).toHaveCount(1);
   const columns = page.locator('.dualDialogue .dualColumn');
   const left = await columns.nth(0).boundingBox(), right = await columns.nth(1).boundingBox();
   expect(right.x).toBeGreaterThan(left.x + left.width); expect(right.y).toBe(left.y);
@@ -99,6 +99,7 @@ test('measured wrapped paragraphs flow across pages; caret survives reflow and d
   await select(page, action.id, middle); await page.keyboard.type('X');
   expect(await page.evaluate(() => window.scriptForge.getSelection().focus)).toEqual({ id: action.id, offset: middle + 1 });
   await select(page, action.id, 1, action.id, text.length + 1); await page.keyboard.press('Backspace');
+  await expect(page.locator('#large-deletion-dialog')).toBeVisible(); await page.keyboard.press('Enter');
   await expect.poll(() => page.locator('.screenplay-page').count()).toBeLessThan(pages.length);
   expect(await page.evaluate(() => window.scriptForge.getSelection().focus)).toEqual({ id: action.id, offset: 1 });
 });
@@ -258,7 +259,7 @@ test('all 127 imported scenes are reachable inside a bounded, independent scene 
   await page.goto('/');
   const source = Array.from({ length: 127 }, (_, i) => `INT. ROOM ${i + 1} - DAY\n\nAn actor enters room ${i + 1}.\n\n`).join('');
   const chooser = page.waitForEvent('filechooser');
-  await page.locator('#import-copy').click();
+  await page.locator('#open-fountain').click();
   await (await chooser).setFiles({ name: '127-scenes.fountain', mimeType: 'text/plain', buffer: Buffer.from(source) });
   await expect(page.locator('#scene-list .scene-link')).toHaveCount(127);
   const list = page.locator('#scene-list');

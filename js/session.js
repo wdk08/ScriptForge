@@ -97,13 +97,13 @@ export class DocumentSession {
     this.generation = 0; this.persistedGeneration = -1; this.queue = Promise.resolve();
     this.storageError = null; this.fileError = null; this.missingFile = false; this.autoFile = false; this.busy = false;
     this.fountainWarnings = Array.isArray(record.fountainWarnings) ? record.fountainWarnings.filter(warning => typeof warning === 'string') : [];
-    this.recovered = Boolean(record.recovery.dirty && record.savedFingerprint);
+    this.recovered = !record.managed && Boolean(record.recovery.dirty && record.savedFingerprint);
     this.automatic = automatic; this.fileDelay = fileDelay; this.autoPaused = false;
-    this.autoFile = automatic && Boolean(record.handle || record.folderPending) && !this.recovered;
+    this.autoFile = !record.managed && automatic && Boolean(record.handle || record.folderPending) && !this.recovered;
     if (record.folderSaveError) this.fileError = new Error(record.folderSaveError);
     if (record.revision != null && documentFingerprint(record.recovery.document) === documentFingerprint(document)) this.persistedGeneration = 0;
   }
-  get dirty() { return documentFingerprint(this.document) !== this.record.savedFingerprint; }
+  get dirty() { return this.record.managed ? !this.recoveryCurrent : documentFingerprint(this.document) !== this.record.savedFingerprint; }
   get recoveryCurrent() { return this.persistedGeneration === this.generation && !this.storageError; }
   emit() { this.onState(this); }
   enqueue(task) {

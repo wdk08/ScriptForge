@@ -11,7 +11,7 @@ test('Tab recognizes the existing Action cue and gives the new parenthetical the
  const result=await page.evaluate(async()=>{
   const{createDocument,createElement}=await import('/js/document.js'),{repository}=await import('/js/storage.js'),{draftRecord}=await import('/js/session.js');
   const doc=createDocument({elements:[createElement('action','VINCENT (V.O.)')]});const record=draftRecord(doc);record.recovery.dirty=false;await repository.put(record);return{id:doc.id,cue:doc.elements[0].id};
- });await page.goto(`/editor.html?id=${result.id}`);if(await page.locator('#recover-changes').isVisible())await page.locator('#recover-changes').click();await page.locator('#pages[contenteditable=true]').waitFor();
+ });await page.goto(`/editor.html?id=${result.id}`);await page.locator('#pages[contenteditable=true]').waitFor();
  await page.evaluate(async id=>{const{restoreSelection}=await import('/js/selection.js');restoreSelection(document.getElementById('pages'),{anchor:{id,offset:14},focus:{id,offset:14}})},result.cue);
  await page.keyboard.press('Tab');await expect(page.locator('#pages .character')).toHaveText('VINCENT (V.O.)');await expect(page.locator('#pages .parenthetical')).toHaveText('()');await page.keyboard.type('quietly');await expect(page.locator('#pages .parenthetical')).toHaveText('(quietly)');
  await page.keyboard.press('ControlOrMeta+z');await page.keyboard.press('ControlOrMeta+z');await expect(page.locator('#pages .actionLine')).toHaveText('VINCENT (V.O.)');

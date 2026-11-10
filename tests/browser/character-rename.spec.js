@@ -8,7 +8,7 @@ async function position(page, id, offset) { await page.evaluate(async ({ id, off
 async function openCopy(page) {
   await page.addInitScript(installSpeechMock); await page.goto('/');
   const id = await page.evaluate(async source => { const { parseFountain } = await import('/js/fountain.js'), { draftRecord } = await import('/js/session.js'), { repository } = await import('/js/storage.js'); return (await repository.put(draftRecord(parseFountain(source)))).id; }, source);
-  await page.goto(`/editor.html?id=${id}`); await page.locator('#recover-changes').click(); await expect(page.locator('#pages')).toContainText('ROSE'); return id;
+  await page.goto(`/editor.html?id=${id}`); await page.locator('#pages[contenteditable=true]').waitFor(); await expect(page.locator('#pages')).toContainText('ROSE'); return id;
 }
 async function review(page, from = 'ROSE', to = 'LILY') { await page.locator('.tools-menu summary').click(); await page.locator('#rename-character').click(); await page.locator('#cr-character').selectOption(from); await page.locator('#cr-name').fill(to); await page.locator('#cr-review').click(); await expect(page.locator('#cr-review-panel')).toBeVisible(); }
 async function voices(page, name) { await page.locator('.tools-menu summary').click(); await page.locator('#simulate-table-read').click(); const voice = page.getByLabel(`Voice for ${name}`, { exact: true }); await expect(voice).toBeEnabled(); return voice; }
@@ -40,7 +40,7 @@ test('rename preview is nonmutating, mentions can be excluded, one undo/redo res
   await page.keyboard.press('ControlOrMeta+Shift+z'); expect(await doc(page)).toEqual(renamed); voice = await voices(page, 'LILY'); await expect(voice.locator('option:checked')).toHaveText('Alex · en-US'); await expect(page.getByLabel('Rate for LILY', { exact: true })).toHaveValue('1.3'); await page.locator('#tr-close').click();
   await expect.poll(() => page.evaluate(() => window.scriptForge.getFileState().recoveryCurrent)).toBe(true);
   const download = page.waitForEvent('download'); await page.locator('#export').click(); await page.locator('#export-fountain').click(); const file = await download; const exported = await readFile(await file.path(), 'utf8'); expect(exported).toContain('LILY (V.O.)'); expect(exported).toContain('Lily holds a rose.'); expect(exported).not.toContain('ROSE (O.S.)');
-  await page.reload(); await page.locator('#recover-changes').click(); expect(await doc(page)).toEqual(renamed); voice = await voices(page, 'LILY'); await expect(voice.locator('option:checked')).toHaveText('Alex · en-US'); await page.locator('#tr-close').click();
+  await page.reload(); await page.locator('#pages[contenteditable=true]').waitFor(); expect(await doc(page)).toEqual(renamed); voice = await voices(page, 'LILY'); await expect(voice.locator('option:checked')).toHaveText('Alex · en-US'); await page.locator('#tr-close').click();
   expect((await doc(page)).id).toBe(id);
 });
 
@@ -52,11 +52,23 @@ test('rename validates existing names, lets Tab navigate the form, and reports p
   await page.evaluate(async () => { const { repository } = await import('/js/storage.js'); repository.setPreference = window.originalPreferenceWrite; }); await page.locator('#cr-confirm').click(); await expect(page.locator('#character-rename-dialog')).not.toBeVisible(); expect((await doc(page)).elements.some(el => el.text === 'LILY (V.O.)')).toBe(true);
 });
 
-test('a confirmed rename autosaves to the existing linked file and undo autosaves the original names', async ({ page, context, browserName }) => {
-  test.skip(browserName === 'webkit', 'WebKit does not expose the native file handles used by this isolated test.');
-  await context.addInitScript(source => { window.voiceRenameFile = (async () => { const root = await navigator.storage.getDirectory(), handle = await root.getFileHandle('Rename.fountain', { create: true }); if (!(await handle.getFile()).size) { const writer = await handle.createWritable(); await writer.write(source); await writer.close(); } return handle; })(); window.showOpenFilePicker = async () => [await window.voiceRenameFile]; }, source);
-  await page.goto('/'); await page.locator('#open-fountain').click(); await expect(page.locator('#pages')).toContainText('ROSE'); const before = await doc(page);
-  await review(page); await page.locator('#cr-confirm').click(); await expect(page.locator('#character-rename-dialog')).not.toBeVisible(); await expect(page.locator('#disk-save-state')).toHaveText('Saved', { timeout: 7000 });
-  const read = () => page.evaluate(async () => (await (await window.voiceRenameFile).getFile()).text()); expect(await read()).toContain('LILY (V.O.)'); expect((await doc(page)).id).toBe(before.id);
-  await page.keyboard.press('ControlOrMeta+z'); await expect(page.locator('#disk-save-state')).toHaveText('Saved', { timeout: 7000 }); expect(await read()).toContain('ROSE (V.O.)'); expect(await doc(page)).toEqual(before);
+test('a confirmed rename and undo autosave into the same library screenplay', async ({ page }) => {
+  await page.goto('/');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('#open-fountain').click();
+  await (await chooser).setFiles({ name: 'Rename.fountain', mimeType: 'text/plain', buffer: Buffer.from(source) });
+  await expect(page.locator('#pages')).toContainText('ROSE');
+  const before = await doc(page);
+  await review(page);
+  await page.locator('#cr-confirm').click();
+  await expect(page.locator('#character-rename-dialog')).not.toBeVisible();
+  await expect(page.locator('#disk-save-state')).toHaveText('Saved');
+  const read = () => page.evaluate(async id => {
+    const { repository } = await import('/js/storage.js');
+    return (await repository.get(id)).recovery.document;
+  }, before.id);
+  expect((await read()).elements.some(el => el.text === 'LILY (V.O.)')).toBe(true);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(page.locator('#disk-save-state')).toHaveText('Saved');
+  expect(await read()).toEqual(before);
 });

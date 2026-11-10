@@ -25,7 +25,7 @@ export async function importOpenedFile(opened, store = repository) {
 }
 export async function createDraft(store = repository) {
   const record = draftRecord();
-  record.recovery.document = withWriterProfile(record.recovery.document, await store.getPreference('writerProfile', {}));
+  record.recovery.document = withWriterProfile(record.recovery.document, await store.getPreference('writerProfile', {}).catch(() => ({})));
   return store.put(record);
 }
 
@@ -44,4 +44,11 @@ export async function createAutoSavedDraft({ store = repository, files = fileSer
     catch { /* The initial draft already exists; open it even if disk metadata cannot be committed. */ }
   } finally { session.dispose(); }
   return record;
+}
+
+export async function importManagedFile(opened, store) {
+  const existing = (await store.list()).find(record => record.fileHash === opened.hash &&
+    (record.originalFileName ?? record.fileName) === opened.name);
+  if (existing) return store.get(existing.id);
+  return store.put(await recordForFile({ ...opened, handle: null }));
 }

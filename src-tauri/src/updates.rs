@@ -14,7 +14,8 @@ pub struct Pending {
     installed: bool,
 }
 fn configured(app: &AppHandle) -> bool {
-    std::env::var_os("SCRIPTFORGE_DESKTOP_SMOKE_ROOT").is_none()
+    app.config().identifier != "com.scriptforge.dev"
+        && std::env::var_os("SCRIPTFORGE_DESKTOP_SMOKE_ROOT").is_none()
         && app.config().plugins.0.get("updater").and_then(|v| v.get("pubkey"))
             .and_then(Value::as_str).is_some_and(|key| !key.trim().is_empty())
 }
@@ -92,7 +93,7 @@ pub fn menu(app: &AppHandle) -> tauri::Result<()> {
         if let MenuItemKind::Submenu(sub)=item {
             if sub.text()?=="Help" {
                 for item in sub.items()? {sub.remove(&item)?;}
-                sub.append(&MenuItem::with_id(app,"sf-update","Check for Updates",true,None::<&str>)?)?;
+                sub.append(&MenuItem::with_id(app,"sf-update","Check for Updates",app.config().identifier != "com.scriptforge.dev",None::<&str>)?)?;
                 sub.append(&MenuItem::with_id(app,"sf-about","About ScriptForge",true,None::<&str>)?)?;
             }
             #[cfg(target_os="macos")]

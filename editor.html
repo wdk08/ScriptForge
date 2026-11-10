@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./css/files.css"><link rel="stylesheet" href="./css/title-page.css">
   <link rel="stylesheet" href="./css/layout.css"><link rel="stylesheet" href="./css/table-read.css"><link rel="stylesheet" href="./css/voice-library.css">
   <script src="./js/launch.js" defer></script><script type="module" src="./js/startup.js" data-entry="editor"></script>
-<link rel="stylesheet" href="./css/editor-features.css"><link rel="stylesheet" href="./css/theme.css"><link rel="stylesheet" href="./css/screenplay-format.css"><link rel="stylesheet" href="./css/writing-statistics.css"></head>
+<link rel="stylesheet" href="./css/editor-features.css"><link rel="stylesheet" href="./css/theme.css"><link rel="stylesheet" href="./css/screenplay-format.css"><link rel="stylesheet" href="./css/writing-statistics.css"><link rel="stylesheet" href="./css/writing-tools.css"></head>
 <body class="editor-app loading-editor">
   <header class="app-header">
     <a id="home" href="./index.html" class="home-button" title="Screenplay library" aria-label="Home">←</a>
@@ -25,8 +25,8 @@
     </div>
   </header>
   <nav class="editing-bar" aria-label="Editing tools">
-    <details class="file-menu toolbar-menu"><summary>File</summary><div class="file-menu-items"><button id="new-document">New screenplay</button><button id="open-file">Open Fountain file…</button><button id="import-file">Import a copy…</button><button id="version-history">Version History</button><button id="export-copy">Export as Fountain</button><button id="export-pdf-copy">Export as PDF</button></div></details>
-    <details class="tools-menu toolbar-menu"><summary>Tools</summary><div class="file-menu-items"><button id="simulate-table-read">Simulate Table Read</button><button id="rename-character">Rename Character</button><button id="writing-statistics">Writing Statistics</button><button id="dialogue-statistics">Character Dialogue Statistics</button><button id="focus-mode" aria-pressed="false">Focus Mode</button><button id="find-screenplay">Find &amp; Replace</button><button id="paste-plain-text" aria-pressed="false">Paste as Plain Text: Off</button></div></details>
+    <details class="file-menu toolbar-menu"><summary>File</summary><div class="file-menu-items"><button id="new-document">New screenplay</button><button id="open-file">Import Fountain file…</button><button id="version-history">Version History</button><button id="export-copy">Export as Fountain</button><button id="export-pdf-copy">Export as PDF</button></div></details>
+    <details class="tools-menu toolbar-menu"><summary>Tools</summary><div class="file-menu-items"><button id="simulate-table-read">Simulate Table Read</button><button id="rename-character">Rename Character</button><button id="writing-statistics">Writing Statistics</button><button id="profanity-analyzer">Profanity Analyzer</button><button id="dialogue-statistics">Character Dialogue Statistics</button><button id="focus-mode" aria-pressed="false">Focus Mode</button><button id="find-screenplay">Find &amp; Replace</button><button id="paste-plain-text" aria-pressed="false">Paste as Plain Text: Off</button></div></details>
     <div class="history-tools">
       <button id="undo" title="Undo (⌘/Ctrl Z)" aria-label="Undo">↶</button>
       <button id="redo" title="Redo (⌘/Ctrl Shift Z)" aria-label="Redo">↷</button>
@@ -37,11 +37,11 @@
     <span class="toolbar-divider"></span>
     <button id="outline-toggle" aria-pressed="true">☷ <span>Outline</span></button>
     <span class="bar-spacer"></span>
-    <label class="autosave-control"><input id="file-autosave" type="checkbox" checked disabled> Autosave to file</label>
+    <span class="autosave-control">Library autosave on</span>
     <span class="paper-spec">US Letter · Courier 12 pt</span>
     <button id="screenplay-settings" class="quiet-button">Settings</button><button id="help" class="help-button">Keyboard guide <span aria-hidden="true">?</span></button>
   </nav>
-  <section id="document-banner" class="document-banner" hidden aria-live="polite"><span id="banner-message"></span><button id="recreate-file" hidden>Recreate file</button><button id="reconnect-file" hidden>Reconnect file</button><button id="review-file-error" hidden>Review file changes</button></section>
+  <section id="document-banner" class="document-banner" hidden aria-live="polite"><span id="banner-message"></span><button id="open-migrated-original" hidden>Open original as a copy</button></section>
   <nav id="format-toolbar" class="format-toolbar" aria-label="Screenplay element format">
     <span class="toolbar-label">ELEMENT</span>
     <button data-format="scene">Scene</button><button data-format="action">Action</button>
@@ -88,13 +88,12 @@
   </dialog>
   <dialog id="screenplay-settings-dialog" aria-labelledby="screenplay-settings-title">
     <span class="eyebrow">THIS SCREENPLAY</span><h1 id="screenplay-settings-title">Screenplay settings</h1>
-    <p>Formatting applies to this screenplay and its PDF exports. Screenplay Folder and Voice Library apply in this browser. Changes save automatically.</p>
+    <p>Formatting applies to this screenplay and its PDF exports. Writing preferences and the Voice Library apply on this device. Changes save automatically.</p>
     <label class="script-setting"><input id="bold-scene-headings" type="checkbox"> Bold scene headings</label>
     <div class="scene-number-setting"><label class="script-setting"><input id="scene-numbers" type="checkbox"> Scene numbers</label><button id="redo-scene-numbers" class="secondary-button">Redo Numbers</button></div>
     <p class="dialog-note">When enabled, scene numbers stay sequential as you edit. Redo Numbers assigns every scene a fresh number in script order, starting at 1. Fountain exports preserve these numbers; bold styling stays in ScriptForge and PDF exports.</p>
     <section class="settings-section"><h2>Appearance</h2><div class="appearance-options"><label><input type="radio" name="appearance" value="light"> Light</label><label><input type="radio" name="appearance" value="dark"> Dark</label><label><input type="radio" name="appearance" value="system" checked> System</label></div><p id="appearance-status" role="status"></p></section>
 <section class="settings-section"><h2>Backups</h2><label><input id="backups-enabled" type="checkbox" checked> Automatic Backups Enabled</label><p><label>Backup Interval <select id="backup-interval"><option value="1">Every 1 Minute</option><option value="5">Every 5 Minutes</option><option value="10" selected>Every 10 Minutes</option><option value="15">Every 15 Minutes</option><option value="30">Every 30 Minutes</option></select></label></p><button id="settings-version-history">Open Version History</button><p>Backups use a separate browser database. Clearing browser data removes them. They do not protect against disk failure or device loss. Autosave remains active when backups are disabled.</p><p id="backup-status" role="status"></p></section>
-<section class="settings-section"><h2>Screenplay Folder</h2><p>Current Folder: <output id="settings-folder-name">Loading…</output></p><button id="screenplay-folder">Change Folder</button><p>New scripts use this folder. Existing linked files stay in their original locations.</p></section>
     <section class="settings-section writer-profile"><h2>Writer Profile</h2><p>Local defaults for new screenplays. Existing title pages keep their own information.</p>
       <label>Author name<input id="writer-author" autocomplete="name"></label>
       <label>Mailing address<textarea id="writer-address" rows="3" autocomplete="street-address"></textarea></label>
@@ -103,21 +102,50 @@
       <button id="save-writer-profile" class="secondary-button">Save Changes</button><p id="writer-profile-status" role="status"></p>
     </section>
     <section class="settings-section"><h2>Voice Library</h2><p>Manage imported voice models.</p><button id="voice-library">Manage Voice Library</button></section>
+    <section class="settings-section"><h2>Writing Preferences</h2>
+      <p>These settings apply to all screenplays on this device. End a trained transition line with Return or Tab.</p>
+      <details><summary>Train Transition</summary><form id="transitions-train"><label>Custom transition <input required maxlength="100" placeholder="TIME CUT TO:"></label><button>Add transition</button></form><ul id="transitions-rules"></ul></details>
+      <details><summary>Train Dialogue Tag</summary><form id="tags-train"><label>Custom dialogue tag <input required maxlength="100" placeholder="(OVER RADIO)"></label><button>Add dialogue tag</button></form><ul id="tags-rules"></ul></details>
+      <label>Confirm deletions larger than <input id="large-deletion-pages" type="number" min="0.25" max="1000" step="any"> pages</label>
+      <p id="writing-rules-status" role="status"></p>
+    </section>
     <div class="dialog-actions"><button id="settings-done" class="primary-button">Done</button></div>
   </dialog>
   <dialog id="help-dialog">
     <form method="dialog"><button class="dialog-close" aria-label="Close keyboard guide">×</button></form>
     <span class="eyebrow">MAKE YOURSELF AT HOME</span><h1>A little rhythm for your writing.</h1>
-    <dl><dt>⌘ / Ctrl + Click</dt><dd>Toggle continuation on a Character cue. Overrides stay in ScriptForge's browser document. Fountain files export the visible continuation text without internal metadata.</dd><dt>⌘ / Ctrl + F</dt><dd>Find across the screenplay. Add Shift + H instead for Replace. Enter and Shift + Enter navigate results; Escape closes search.</dd><dt>⌘ / Ctrl + Shift + F</dt><dd>Toggle Focus Mode. Escape returns to the writing room.</dd><dt>⌘ / Ctrl + 1–6</dt><dd>1 Scene Heading · 2 Action · 3 Character · 4 Parenthetical · 5 Dialogue · 6 Transition. Works only in the screenplay editor. Some browsers reserve these keys for tab switching and may prevent interception.</dd><dt>Plain text paste</dt><dd>Tools → Paste as Plain Text bypasses screenplay detection until switched off. Single-line paste always inserts text normally.</dd><dt>INT. / EXT.</dt><dd>Typing either prefix at the start of action creates a scene heading.</dd><dt>Enter</dt><dd>After character or parenthetical, start dialogue. After dialogue, start action. Filled lines stay intact; only blank lines change in place.</dd><dt>⌘ / Ctrl + ] / [ / \</dt><dd>Move the selected elements’ right text boundaries right / left by 5 points, or reset. Left indentation stays unchanged. Overrides stay in ScriptForge; plain Fountain omits custom margins.</dd><dt>Shift + Enter</dt><dd>A line break within the current element.</dd><dt>Tab</dt><dd>Dialogue → parenthetical; parenthetical → dialogue; character → parenthetical; empty character → transition. Filled lines create the next element below.</dd><dt>Shift + Tab</dt><dd>Advance backward through element types on a new line, or change a blank line.</dd><dt>Character cues</dt><dd>Names automatically capitalize while typing.</dd><dt>⌘ / Ctrl + Z</dt><dd>Undo. Add Shift to redo.</dd><dt>⌘ / Ctrl + S</dt><dd>Save to the linked file or Screenplay Folder.</dd><dt>Backspace / Delete</dt><dd>Delete text, or merge at an element boundary. Clearing a parenthetical also clears its brackets.</dd></dl>
+    <dl><dt>⌘ / Ctrl + Click</dt><dd>Toggle continuation on a Character cue. Overrides stay in ScriptForge's browser document. Fountain files export the visible continuation text without internal metadata.</dd><dt>⌘ / Ctrl + F</dt><dd>Find across the screenplay. Add Shift + H instead for Replace. Enter and Shift + Enter navigate results; Escape closes search.</dd><dt>⌘ / Ctrl + Shift + F</dt><dd>Toggle Focus Mode. Escape returns to the writing room.</dd><dt>⌘ / Ctrl + 1–6</dt><dd>1 Scene Heading · 2 Action · 3 Character · 4 Parenthetical · 5 Dialogue · 6 Transition. Works only in the screenplay editor. Some browsers reserve these keys for tab switching and may prevent interception.</dd><dt>Plain text paste</dt><dd>Tools → Paste as Plain Text bypasses screenplay detection until switched off. Single-line paste always inserts text normally.</dd><dt>INT. / EXT.</dt><dd>Typing either prefix at the start of action creates a scene heading.</dd><dt>Enter</dt><dd>After character or parenthetical, start dialogue. After dialogue, start action. Filled lines stay intact; only blank lines change in place.</dd><dt>⌘ / Ctrl + ] / [ / \</dt><dd>Move the selected elements’ right text boundaries right / left by 5 points, or reset. Left indentation stays unchanged. Overrides stay in ScriptForge; plain Fountain omits custom margins.</dd><dt>Shift + Enter</dt><dd>A line break within the current element.</dd><dt>Tab</dt><dd>Dialogue → parenthetical; parenthetical → dialogue; character → parenthetical; empty character → transition. Filled lines create the next element below.</dd><dt>Shift + Tab</dt><dd>Advance backward through element types on a new line, or change a blank line.</dd><dt>Character cues</dt><dd>Names automatically capitalize while typing.</dd><dt>⌘ / Ctrl + Z</dt><dd>Undo. Add Shift to redo.</dd><dt>⌘ / Ctrl + S</dt><dd>Save to your local library.</dd><dt>Backspace / Delete</dt><dd>Delete text, or merge at an element boundary. Clearing a parenthetical also clears its brackets.</dd></dl>
     <p>Select across elements to format, copy, or replace them together. The second character of simultaneous dialogue uses Dual Character. The two speech blocks then appear side by side.</p>
-    <p class="dialog-note">Recovery snapshots are saved automatically in this browser. Autosave stays enabled and updates the linked Fountain file after edits. Choose Screenplay Folder for unlinked drafts; supported browser file access and permission are required. Export downloads a separate copy. Fountain emphasis markers remain visible while editing.</p>
+    <p class="dialog-note">Your screenplay saves automatically in your local library. Export creates a separate copy for sharing or backup.</p>
   </dialog>
-  <dialog id="recovery-dialog"><span class="eyebrow">PICK UP WHERE YOU LEFT OFF</span><h1>Unsaved changes are available.</h1><p id="recovery-description"></p><p class="dialog-note">Recovering changes only opens the snapshot in the editor. Opening recovery does not change the original file. Continuing to edit resumes autosaving to that file.</p><div class="dialog-actions"><button id="open-saved" class="secondary-button">Open saved version</button><button id="recover-changes" class="primary-button">Recover changes</button></div><button id="recovery-home" class="quiet-button">Back to library</button></dialog>
-  <dialog id="file-conflict-dialog"><span class="eyebrow">YOUR FILE HAS CHANGED</span><h1>Review before replacing.</h1><p id="file-conflict-message"></p><label class="comparison-label">Current local file<textarea id="disk-version" readonly></textarea></label><label class="comparison-label">Your version<textarea id="editor-version" readonly></textarea></label><div class="dialog-actions"><button id="conflict-close" class="secondary-button">Keep editing</button><button id="conflict-copy" class="secondary-button">Export a copy</button><button id="conflict-overwrite" class="primary-button">Replace reviewed file</button></div></dialog>
   <button id="focus-exit" class="focus-exit" hidden>Exit Focus Mode · Esc</button>
 <dialog id="statistics-dialog" class="feature-dialog" aria-labelledby="statistics-title"><header><h1 id="statistics-title">Character Dialogue Statistics</h1><button id="statistics-close" aria-label="Close statistics">×</button></header><table><thead><tr><th><button data-stat-sort="name">Character</button></th><th><button data-stat-sort="blocks">Blocks</button></th><th><button data-stat-sort="words">Words</button></th><th><button data-stat-sort="percent">Percent</button></th></tr></thead><tbody id="statistics-rows"></tbody></table><p id="statistics-totals"></p></dialog>
 <dialog id="versions-dialog" class="feature-dialog" aria-labelledby="versions-title"><header><h1 id="versions-title">Version History</h1><button id="versions-close" aria-label="Close version history">×</button></header><p>Independent browser snapshots. Clearing browser data removes these backups; these are not protection against device loss.</p><div id="version-list" class="version-list"></div><pre id="version-preview" aria-label="Version preview"></pre><p id="version-status" role="status"></p><div class="dialog-actions"><button id="version-refresh">Refresh</button><button id="version-snapshot">Back Up Now</button><button id="version-restore" class="primary-button" disabled>Restore</button></div></dialog>
-<dialog id="restore-confirm-dialog" class="feature-dialog"><h1>Restore this version?</h1><p>Your current screenplay will be backed up before restoring. Its linked file will then autosave the restored version.</p><div class="dialog-actions"><button id="restore-cancel">Cancel</button><button id="restore-confirm" class="primary-button">Back up current and restore</button></div></dialog>
+<dialog id="restore-confirm-dialog" class="feature-dialog"><h1>Restore this version?</h1><p>Your current screenplay will be backed up before restoring. The restored version will become the working screenplay in your library.</p><div class="dialog-actions"><button id="restore-cancel">Cancel</button><button id="restore-confirm" class="primary-button">Back up current and restore</button></div></dialog>
 <div id="measurement" class="measurement" aria-hidden="true"></div>
+<dialog id="large-deletion-dialog" aria-labelledby="large-deletion-title">
+  <form method="dialog">
+    <h1 id="large-deletion-title">Delete Large Selection?</h1>
+    <p id="large-deletion-description"></p>
+    <div class="dialog-actions"><button value="cancel" type="submit" formnovalidate>Cancel</button><button id="large-deletion-confirm" value="delete" class="primary-button" autofocus>Delete</button></div>
+  </form>
+</dialog>
+<dialog id="profanity-dialog" class="feature-dialog profanity-panel" aria-labelledby="profanity-title">
+  <header><h1 id="profanity-title">Profanity Analyzer</h1><button id="profanity-close" aria-label="Close Profanity Analyzer">×</button></header>
+  <p>A customizable word and phrase count. It does not determine an MPA rating.</p>
+  <p id="profanity-totals" role="status"></p>
+  <div class="profanity-filters"><label>Group <select id="profanity-group"></select></label><label>Variation <select id="profanity-variation"></select></label><label>Scene <select id="profanity-scene"></select></label></div>
+  <details><summary>Counts by group</summary><div id="profanity-counts"></div></details>
+  <details><summary>Counts by scene</summary><ul id="profanity-scene-counts"></ul></details>
+  <details><summary>Edit dictionary</summary>
+    <p>When groups share a variation, the first enabled group owns its count.</p>
+    <p id="profanity-status" role="status"></p>
+    <label>New group name <input id="profanity-new-group" maxlength="120"></label>
+    <button id="profanity-add-group">Add group</button><button id="profanity-reset">Reset dictionary</button>
+    <div id="profanity-dictionary"></div>
+  </details>
+  <h2>Occurrences</h2><ol id="profanity-occurrences"></ol><button id="profanity-more" hidden>Show more</button>
+</dialog>
+<dialog id="profanity-reset-confirm"><form method="dialog"><h1>Reset the profanity dictionary?</h1><p>Custom groups and variations will be replaced with the defaults.</p><div class="dialog-actions"><button autofocus>Cancel</button><button id="profanity-reset-yes" type="button" class="primary-button">Reset dictionary</button></div></form></dialog>
 </body>
 </html>

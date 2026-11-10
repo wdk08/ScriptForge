@@ -1,3 +1,6 @@
+import { affectedPageCount, confirmLargeDeletion } from './large-deletion.js';
+import { deletionThreshold } from './writing-preferences.js';
+import { setupProfanityAnalyzer, setupWritingRules } from './writing-tools.js';
 import { visualClickCaret } from './selection.js';
 import { inlineUnits, adjacentInlineOffset } from './inline-layout.js';
 import {createWritingController} from './writing-controller.js';
@@ -19,27 +22,29 @@ import { createMeasurer, layoutUnits, paginate } from './pagination.js';
 import { ensureScreenplayFonts } from './screenplay-format.js';
 import { renderPages, invalidateNativeEdit } from './renderer.js';
 import { readSelection, restoreSelection, adjacentCaret, domPoint, verticalCaret } from './selection.js';
-import { repository } from './storage.js';
+import { libraryRepository as repository, openMigratedOriginal } from './managed-library.js';
+import { isDesktop } from './desktop.js';
 import { fileService, fountainFilename } from './files.js';
-import { DocumentSession, draftRecord, recordForFile, fountainForSaving } from './session.js';
-import { createAutoSavedDraft, importOpenedFile } from './library.js';
+import { DocumentSession, draftRecord, fountainForSaving } from './session.js';
+import { createDraft, importManagedFile } from './library.js';
 
 import { exportPDF } from './pdf-export.js';
 import { setupVoiceLibrary } from './voice-library.js';
 import { setupTableRead } from './table-read.js';
-import { setupFolderSetting } from './folder-settings.js';
 const $ = id => document.getElementById(id);
 const toolbarMenus = setupToolbarMenus();
-const folderSettings = setupFolderSetting($('screenplay-folder'), { onChange: async directory => {
-  void refreshSettingsFolder();
-  if (!session) return;
-  try {
-    if (missingLinkedFile()) { await session.recreateMissingFile(directory); fileAccessError = null; }
-    else if (!session.record.handle) await session.saveToFolder(directory);
-    else if (session.record.handle && !session.recovered) { session.autoFile = true; await session.flush(); }
-  } catch (error) { notify(`Not saved to disk: ${error.message}`); updateFileState(); }
-} });
 const root = $('pages');
+setupWritingRules();
+const refreshProfanity = setupProfanityAnalyzer({
+  getDocument: () => history.current.document,
+  navigate(match) {
+    currentSelection = { anchor: { id: match.elementId, offset: match.start }, focus: { id: match.elementId, offset: match.end } };
+    // Focus the editor and select the actual matched source range.
+    root.focus({ preventScroll: true });
+    restoreSelection(root, currentSelection, { scroll: true });
+    activeElement.update();
+  },
+});
 const writing = createWritingController({error: failure => notify(`Writing statistics: ${failure.message}`)});
 let statisticsKind = 'layout', statisticsDetails = {};
 setupWritingStatistics({button: $('writing-statistics'), controller: writing, onClear: () => history && writing.open(history.current.document, pageLayout.length)});
@@ -117,7 +122,7 @@ let typingStyles=null, typingPoint=null;
 let history, currentSelection, pageLayout = [], dirty = false, composition = null;
 let outlineSignature = '', wordCounts = new Map();
 let composingJustEnded = false, noticeTimer, renderTimer, preferredX = null;
-let session, allowLeave = false, fileAccessError = null, reviewedHash = null, ioBusy = false;
+let session, allowLeave = false, ioBusy = false;
 const measure = createMeasurer($('measurement'));
 function notify(message) {
   $('notice').textContent = message; $('notice').hidden = false;
@@ -131,22 +136,21 @@ function load(doc, record) {
   const start = freshTemplate ? elements[1] : elements[0];
   currentSelection = caret(start.id);
   history = new EditorHistory(doc, currentSelection); dirty = false;
-  session = new DocumentSession(repository, fileService, record, doc, { onState: updateFileState, automatic: true });
-  if (record.recovery.selection?.focus && editableElements(doc).some(el => el.id === record.recovery.selection.focus.id)
-    && editableElements(doc).some(el => el.id === record.recovery.selection.anchor.id)) currentSelection = record.recovery.selection;
+  session = new DocumentSession(repository, fileService, { ...record, managed: true }, doc, { onState: updateFileState, automatic: false });
+  const saved = record.recovery.selection;
+  const restoreSaved = saved?.focus && elements.some(el => el.id === saved.focus.id)
+    && elements.some(el => el.id === saved.anchor?.id);
+  if (restoreSaved) currentSelection = saved;
   session.selection = currentSelection;
   document.body.classList.remove('loading-editor');
   root.contentEditable = 'true';
   render(false);
+  if (restoreSaved) restoreSelection(root, currentSelection, { scroll: true });
   void writing.open(doc, pageLayout.length);
   updateFileState();
   features?.loaded();
   window.history.replaceState(null, '', `./editor.html?id=${encodeURIComponent(record.id)}`);
-  const loaded = session;
-  if (record.pendingRenames?.length) loaded.retryRenameCleanup().catch(error => notify(error.message));
-  if (!record.handle && !loaded.recovered) repository.getPreference('screenplayFolder', null).then(async directory => {
-    if (directory && session === loaded) await loaded.saveToFolder(directory);
-  }).catch(error => { if (session === loaded) { loaded.fileError = error; updateFileState(); } });
+
 }
 
 function activeType() {
@@ -220,9 +224,35 @@ function render(focus = true) {
   viewport.scrollTop = scrollTop; viewport.scrollLeft = horizontal;
   updateTools();
   features?.update();
+  refreshProfanity();
 }
 function apply(command, selection = readSelection(root) ?? currentSelection) {
-  if (editingLocked) return;
+  if (editingLocked || !history) return;
+  if (!command.deletionApproved) {
+    const original = history.current.document;
+    const pages = affectedPageCount(original, selection, command, pageLayout);
+    if (pages > deletionThreshold()) {
+      const viewport = root.closest('.document-viewport');
+      const scroll = [viewport.scrollLeft, viewport.scrollTop];
+      editingLocked = true;
+      const copyCut = command.statisticsKind === 'cut'
+        ? () => navigator.clipboard.writeText(selectedText(original, selection)) : null;
+      return confirmLargeDeletion(pages, copyCut).then(accepted => {
+        if (!accepted || history.current.document !== original) return;
+        editingLocked = false;
+        return apply({ ...command, deletionApproved: true }, selection);
+      }).catch(error => notify('Edit stopped: ' + error.message)).finally(() => {
+        editingLocked = false;
+        if (history.current.document === original) {
+          currentSelection = selection;
+          root.focus({ preventScroll: true });
+          restoreSelection(root, selection);
+          [viewport.scrollLeft, viewport.scrollTop] = scroll;
+          activeElement.update();
+        }
+      });
+    }
+  }
   if (features?.needsBackup(command, selection)) {
     const original = history.current.document;
     editingLocked = true; root.contentEditable = 'false';
@@ -322,7 +352,7 @@ root.addEventListener('keydown', event => {
   }
   if (mod && key === 'z') { event.preventDefault(); undo(event.shiftKey); return; }
   if (mod && key === 'y') { event.preventDefault(); undo(true); return; }
-  if (mod && key === 's') { event.preventDefault(); saveToDisk(); return; }
+  if (mod && key === 's') { event.preventDefault(); saveToLibrary(); return; }
   if (event.key === 'Tab' && !mod && !event.altKey) {
     const element = history.current.document.elements.find(el => el.id === selection.focus.id);
     if (element) { event.preventDefault(); apply({ type: 'tab', reverse: event.shiftKey }, selection); }
@@ -414,8 +444,11 @@ root.addEventListener('copy', event => {
 });
 root.addEventListener('cut', event => {
   const selection = readSelection(root) ?? currentSelection;
-  event.preventDefault(); event.clipboardData.setData('text/plain', selectedText(history.current.document, selection));
-  apply({ type: 'insert', text: '', statisticsKind: 'cut' }, selection);
+  event.preventDefault();
+  const command = { type: 'insert', text: '', statisticsKind: 'cut' };
+  const pages = affectedPageCount(history.current.document, selection, command, pageLayout);
+  if (pages <= deletionThreshold()) event.clipboardData.setData('text/plain', selectedText(history.current.document, selection));
+  apply(command, selection);
 });
 root.addEventListener('drop', event => {
   event.preventDefault();
@@ -449,7 +482,7 @@ $('document-title').addEventListener('keydown', event => {
 });
 $('new-document').addEventListener('click', async () => {
   try {
-    await session?.flush(); await writing.pause(); await folderSettings.beforeCreate(); const record = await createAutoSavedDraft({ deferDisk: true }); fileAccessError = null;
+    await session?.flush(); await writing.pause(); const record = await createDraft(repository);
     load(record.recovery.document, record); closeMenu(); render();
   } catch (error) { notify(`Could not start a new screenplay: ${error.message}`); }
 });
@@ -458,14 +491,14 @@ async function exportFountain() {
     const doc = history.current.document;
     let warning;
     await fileService.download(fountainForSaving(doc, { onWarning: text => { warning = text; } }), fountainFilename(doc.title)); closeMenu(); document.querySelector('.export-menu').open = false;
-    notify(warning || 'Fountain copy exported. Autosave continues updating your linked file.');
+    notify(warning || 'Fountain copy exported.');
   } catch (error) { notify(`Export stopped: ${error.message}`); }
 }
 $('export-fountain').addEventListener('click', exportFountain);
-$('save').addEventListener('click', saveToDisk);
+$('save').addEventListener('click', saveToLibrary);
 async function exportScreenplayPDF() {
   document.querySelector('.export-menu').open = false;
-  try { await exportPDF(history.current.document); closeMenu(); notify('PDF exported.'); }
+  try { const result = await exportPDF(history.current.document); closeMenu(); notify(result.emojiFallback.length ? 'PDF exported. Some emojis used bundled artwork because native artwork was unavailable.' : 'PDF exported.'); }
   catch (error) { notify(`PDF export stopped: ${error.message}`); }
 }
 $('export-pdf').addEventListener('click', exportScreenplayPDF);
@@ -473,7 +506,7 @@ $('export-pdf-copy').addEventListener('click', exportScreenplayPDF);
 $('export-copy').addEventListener('click', exportFountain);
 document.addEventListener('keydown', event => {
   if (!event.defaultPrevented && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-    event.preventDefault(); saveToDisk();
+    event.preventDefault(); saveToLibrary();
   }
 });
 document.addEventListener('click', event => {
@@ -494,88 +527,38 @@ window.scriptForge = Object.freeze({
 });
 
 function closeMenu() { toolbarMenus.closeAll(); }
-function missingLinkedFile() {
-  return Boolean(session?.record.handle && (session.missingFile || session.fileError?.name === 'NotFoundError' || fileAccessError?.name === 'NotFoundError'));
-}
 function updateFileState() {
   if (!session) return;
   dirty = session.dirty;
-  const pending = !session.recoveryCurrent;
-  $('disk-save-state').textContent = session.busy ? 'Saving…' : session.fileError || fileAccessError ? 'Save failed'
-    : session.record.pendingRenames?.length ? 'Saving…' : dirty ? 'Unsaved changes' : session.record.handle ? 'Saved' : session.record.savedAt ? 'Copy downloaded' : session.recoveryCurrent ? 'Recovery saved' : 'Saving recovery…';
-  $('save-state').textContent = session.busy ? 'Saving Fountain file…'
-    : session.storageError ? 'Recovery unavailable · save a Fountain copy'
-    : fileAccessError ? 'Cached copy · local file access unavailable'
-    : dirty ? `${session.record.fileName ? 'Unsaved file changes' : 'Draft · no Fountain file yet'} · ${pending ? 'saving recovery…' : 'recovery saved'}`
-    : `${session.record.handle ? `Saved to ${session.record.fileName}` : fileService.supportsSavePicker ? 'File copy · choose Screenplay Folder' : 'Browser recovery · Export creates a separate file'} · ${pending ? 'saving recovery…' : 'recovery saved'}`;
-  $('save').disabled = ioBusy || session.busy;
-  $('file-autosave').checked = true;
-  $('file-autosave').disabled = true;
-  $('file-autosave').title = session.record.handle ? 'Autosave always updates this same linked file after edits. Disk failures are shown separately.' : 'Autosave is enabled. Choose Screenplay Folder to enable disk saving in a supported browser. Recovery always saves separately.';
-  let message = '';
-  if (session.storageError) message = `Recovery could not be saved: ${session.storageError.message}`;
-  else if (missingLinkedFile()) message = 'The linked file was moved or deleted. Your edits remain in the editor and browser recovery continues. Recreate file saves this screenplay to its linked folder or your chosen Screenplay Folder and resumes autosaving; an existing file will not be overwritten.';
-  else if (session.fileError) message = `File save stopped. ${session.fileError.message}`;
-  else if (fileAccessError) message = `Showing the cached copy. ${fileAccessError.message} Your local file has not been changed.`;
-  else if (session.recovered) message = 'Recovered unsaved changes. Your original file is unchanged; Continuing to edit resumes autosaving to the same file.';
-  else if (session.fountainWarnings.length) message = session.fountainWarnings.join(' ');
-  else if (session.record.fileReferenceWarning && !session.record.handle) message = session.record.fileReferenceWarning;
-  else if (!session.record.fileName) message = fileService.supportsDirectories ? 'Browser recovery is saved locally. Choose Screenplay Folder for automatic disk saving.' : 'Browser recovery is local to this browser. Use Export to keep a separate Fountain backup. Clearing website data can erase recovery.';
-  else if (!session.record.handle) message = fileService.supportsSavePicker
-    ? 'This is a browser copy. Choose Screenplay Folder for automatic disk saving, or Export a copy.'
-    : 'This is a browser copy. This browser cannot save to a local folder automatically. Recovery is active; Export downloads a copy.';
-  $('document-banner').hidden = !message; $('banner-message').textContent = message;
-  $('recreate-file').hidden = !missingLinkedFile();
-  $('recreate-file').disabled = ioBusy || session.busy;
-  $('reconnect-file').hidden = !((fileAccessError || session.fileError) && session.record.handle);
-  $('review-file-error').hidden = session.fileError?.name !== 'FileConflictError';
+  $('disk-save-state').textContent = session.storageError ? 'Save failed' : dirty ? 'Saving…' : 'Saved';
+  $('save-state').textContent = session.storageError ? 'Local storage unavailable · export a copy'
+    : dirty ? 'Saving to your library…' : isDesktop() ? 'Saved in your local library' : 'Saved in this browser';
+  $('save').disabled = ioBusy;
+  const message = session.storageError ? 'Could not save: ' + session.storageError.message : session.record.migrationNotice;
+  $('document-banner').hidden = !message;
+  $('banner-message').textContent = message || '';
+  $('open-migrated-original').hidden = !session.record.legacySource;
 }
-function showConflict(error) {
-  reviewedHash = error.current.hash;
-  $('file-conflict-message').textContent = error.message;
-  $('disk-version').value = error.current.source;
-  try { $('editor-version').value = fountainForSaving(history.current.document); } catch { $('editor-version').value = editableElements(history.current.document).map(el => el.text).join('\n\n'); }
-  if (!$('file-conflict-dialog').open) $('file-conflict-dialog').showModal();
-}
-async function saveToDisk() {
+async function saveToLibrary() {
   if (!session || ioBusy) return;
-  if (missingLinkedFile()) { $('recreate-file').click(); return; }
-  if (!session.record.handle) {
-    const directory = await repository.getPreference('screenplayFolder', null).catch(error => { notify(error.message); return null; });
-    if (!directory) { $('screenplay-folder').click(); notify('Choose Screenplay Folder to save this screenplay to disk.'); return; }
-    ioBusy = true; updateFileState();
-    try { await session.saveToFolder(directory); fileAccessError = null; notify(`Saved ${session.record.fileName}.`); }
-    catch (error) { notify(`Could not save: ${error.message}`); }
-    finally { ioBusy = false; updateFileState(); }
-    return;
-  }
-  await saveDocument(false);
+  ioBusy = true;
+  updateFileState();
+  try { await session.flush(); notify('Saved in your local library.'); }
+  catch (error) { notify('Could not save: ' + error.message); }
+  finally { ioBusy = false; updateFileState(); }
 }
-async function saveDocument(as = false, overrideHash = null) {
-  if (!session || ioBusy) return;
-  ioBusy = true; updateFileState();
+$('open-migrated-original').onclick = async () => {
   try {
-    const result = await (as ? session.saveAs() : session.save({ overrideHash }));
-    // Save As can fork the file identity, while undo still concerns screenplay edits.
-    if (history.current.document.id !== session.record.id) {
-      for (const state of [history.current, ...history.past, ...history.future]) state.document = { ...state.document, id: session.record.id };
-      session.document = history.current.document;
-    }
-    fileAccessError = null; closeMenu();
-    window.history.replaceState(null, '', `./editor.html?id=${encodeURIComponent(session.record.id)}`);
-    notify(`${result.kind === 'file' ? `Saved ${result.name}.` : 'Fountain download started. This browser reopens the cached copy.'}${session.storageError ? ' Browser recovery still could not be saved.' : ''}`);
-  } catch (error) {
-    if (error.name === 'FileConflictError') showConflict(error);
-    else if (error.name !== 'AbortError') notify(`Could not save: ${error.message}`);
-  } finally { ioBusy = false; updateFileState(); }
-}
-async function refreshSettingsFolder() {
-  try { await fileService.ready; const directory = fileService.restoreHandle(await repository.getPreference('screenplayFolder', null)); $('settings-folder-name').textContent = directory?.name || 'No folder selected'; }
-  catch (error) { $('settings-folder-name').textContent = `Folder setting unavailable: ${error.message}`; }
-}
+    await session.flush();
+    await writing.pause();
+    const record = await openMigratedOriginal(session.record);
+    allowLeave = true;
+    location.href = './editor.html?id=' + encodeURIComponent(record.id);
+  } catch (error) { notify(error.message); }
+};
 $('screenplay-settings').addEventListener('click', () => {
   if (!history || composition) return;
-  void refreshSettingsFolder(); void loadWriterProfile(); $('screenplay-settings-dialog').showModal();
+  void loadWriterProfile(); $('screenplay-settings-dialog').showModal();
 });
 async function loadWriterProfile() {
   const controls = ['author', 'address', 'phone', 'email'].map(field => $(`writer-${field}`));
@@ -608,56 +591,23 @@ function changeSettings(command) {
 $('bold-scene-headings').addEventListener('change', event => changeSettings({ type: 'settings', changes: { boldSceneHeadings: event.target.checked } }));
 $('scene-numbers').addEventListener('change', event => changeSettings({ type: 'settings', changes: { sceneNumbers: event.target.checked } }));
 $('redo-scene-numbers').addEventListener('click', () => changeSettings({ type: 'renumber' }));
-$('review-file-error').addEventListener('click', () => showConflict(session.fileError));
-$('conflict-close').addEventListener('click', () => $('file-conflict-dialog').close());
-$('conflict-copy').addEventListener('click', () => { $('file-conflict-dialog').close(); exportFountain(); });
-$('conflict-overwrite').addEventListener('click', () => { $('file-conflict-dialog').close(); saveDocument(false, reviewedHash); });
 async function toLibrary() {
   try { await session?.flush(); await writing.pause(); allowLeave = true; location.href = './index.html'; }
   catch (error) { notify(`Your current text is still here. Save a copy before leaving: ${error.message}`); }
 }
 $('home').addEventListener('click', event => { event.preventDefault(); toLibrary(); });
-$('recovery-home').addEventListener('click', () => { location.href = './index.html'; });
-$('recovery-dialog').addEventListener('cancel', event => { event.preventDefault(); location.href = './index.html'; });
-async function openFile(importCopy = false) {
+$('open-file').addEventListener('click', async () => {
   if (ioBusy) return;
   ioBusy = true;
   try {
-    const opened = await fileService.open({ importCopy });
-    await session?.flush(); await writing.pause();
-    const record = await importOpenedFile(opened); allowLeave = true;
-    location.href = `./editor.html?id=${encodeURIComponent(record.id)}`;
+    const opened = await fileService.importCopy();
+    await session?.flush();
+    await writing.pause();
+    const record = await importManagedFile(opened, repository);
+    allowLeave = true;
+    location.href = './editor.html?id=' + encodeURIComponent(record.id);
   } catch (error) { if (error.name !== 'AbortError') notify(error.message); }
   finally { ioBusy = false; updateFileState(); }
-}
-$('open-file').addEventListener('click', () => openFile());
-$('import-file').addEventListener('click', () => openFile(true));
-$('recreate-file').addEventListener('click', async () => {
-  if (ioBusy || !missingLinkedFile()) return;
-  ioBusy = true; updateFileState();
-  try {
-    const directory = session.record.fileDirectory ?? await repository.getPreference('screenplayFolder', null);
-    if (!directory) {
-      $('screenplay-folder').click();
-      notify('Choose a Screenplay Folder to recreate this missing file.');
-      return;
-    }
-    const result = await session.recreateMissingFile(directory);
-    fileAccessError = null;
-    notify(`Recreated ${result.name}. Autosaving has resumed.`);
-  } catch (error) { notify(`Could not recreate the file: ${error.message}`); }
-  finally { ioBusy = false; updateFileState(); }
-});
-$('reconnect-file').addEventListener('click', async () => {
-  try {
-    const current = await fileService.read(session.record.handle, { request: true }); fileAccessError = null; session.missingFile = false;
-    if (current.hash !== session.record.fileHash) {
-      const { FileConflictError } = await import('./files.js'); session.fileError = new FileConflictError(current); session.autoFile = false;
-    } else session.fileError = null;
-    if (!session.fileError && !session.recovered) { session.autoFile = true; await session.flush(); }
-    updateFileState(); notify('File access restored. Autosave checks for outside changes before writing.');
-  }
-  catch (error) { fileAccessError = error; updateFileState(); }
 });
 $('zoom').addEventListener('change', () => repository.setPreference('zoom', $('zoom').value).catch(error => notify(error.message)));
 $('outline-toggle').addEventListener('click', () => repository.setPreference('outline', !$('outline').hidden).catch(error => notify(error.message)));
@@ -675,23 +625,6 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pagehide', savePendingRecovery);
 window.addEventListener('pagehide', () => { session?.dispose(); clearTimeout(renderTimer); clearTimeout(noticeTimer); });
 
-async function openSavedRecord(record) {
-  let opened;
-  try {
-    opened = record.handle ? await fileService.read(record.handle) : null;
-  } catch (error) { fileAccessError = error; }
-  if (opened) {
-    if (opened.hash === record.fileHash) { load(record.recovery.document, record); return; }
-    await backups.capture(record.recovery.document, 'Before File Refresh');
-    const refreshed = await recordForFile(opened, record);
-    refreshed.recoveryHistory = record.recoveryHistory ?? [];
-    const updated = await repository.put(refreshed, record.revision);
-    load(updated.recovery.document, updated);
-  } else {
-    const doc = record.recovery.document;
-    load(doc, record);
-  }
-}
 async function initialize() {
   await ensureScreenplayFonts();
   document.body.classList.add('loading-editor'); root.contentEditable = 'false';
@@ -709,24 +642,9 @@ async function initialize() {
       if (record?.deletedAt) throw new Error('This screenplay was removed from the library. Undo the deletion on the homepage or reopen its Fountain file.');
       if (!record) throw new Error('This recent screenplay was not found. Return to the library to open its Fountain file.');
       validateDocument(record.recovery?.document);
-      if (record.recovery?.dirty) {
-        $('recovery-description').textContent = `${record.title} has a browser snapshot from ${new Date(record.recovery.at).toLocaleString()}. ${record.fileName ? `Original file: ${record.fileName}.` : 'This draft has not been saved to a Fountain file yet.'}`;
-        $('open-saved').disabled = record.cachedSource == null;
-        $('recover-changes').onclick = () => { $('recovery-dialog').close(); load(record.recovery.document, record); render(); };
-        $('open-saved').onclick = async () => {
-          try {
-            // Retain the unsaved draft as its original library entry.
-            const opened = record.handle ? await fileService.read(record.handle, { request: true }) : { source: record.cachedSource, name: record.fileName, hash: record.fileHash, handle: null };
-            const saved = await recordForFile({ ...opened, handle: null });
-            saved.savedVersionOf = record.id;
-            const copy = await repository.put(saved); $('recovery-dialog').close(); load(copy.recovery.document, copy);
-          } catch (error) { notify(error.message); }
-        };
-        $('recovery-dialog').showModal(); return;
-      }
-      await openSavedRecord(record); return;
+      load(record.recovery.document, record); return;
     }
-    if (!params.has('sample')) { record = await createAutoSavedDraft({ deferDisk: true }); load(record.recovery.document, record); return; }
+    if (!params.has('sample')) { record = await createDraft(repository); load(record.recovery.document, record); return; }
     const doc = parseFountain(demo, { title: 'The Last Signal' });
     record = draftRecord(doc);
     try { record = await repository.put(record); }

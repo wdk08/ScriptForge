@@ -47,7 +47,7 @@ test('legacy overrides retain exact points while future shortcuts resize highlig
  expect(await page.evaluate(()=>window.scriptForge.getSelection().focus.offset)).toBe(18);await expect(page.locator('.active-writing-area')).toHaveCount(1);
  await page.keyboard.press('ControlOrMeta+Backslash');expect((await geometry(page)).width).toBeCloseTo(initial.width+4,3);
  await page.keyboard.press('ControlOrMeta+z');await page.evaluate(()=>window.scriptForgeBeforeClose());const expected=await page.evaluate(()=>window.scriptForge.getDocument());
- await page.reload();await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect(await page.evaluate(()=>window.scriptForge.getDocument())).toEqual(expected);
+ await page.reload();await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect(await page.evaluate(()=>window.scriptForge.getDocument())).toEqual(expected);
  await caret(page,speech.id,12);await page.keyboard.press('Shift+ArrowRight');await page.keyboard.press('ControlOrMeta+[');expect(await page.evaluate(()=>window.scriptForge.getSelection())).toEqual({anchor:{id:speech.id,offset:12},focus:{id:speech.id,offset:13}});
 });
 

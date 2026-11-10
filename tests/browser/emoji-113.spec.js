@@ -6,7 +6,7 @@ test('native emoji appearance, composition, caret, scroll, editing and recovery 
  const result=await page.evaluate(f=>window.scriptForgeEmojiProof(f),fixture);expect(result.cases).toBe(81);
  if(browserName==='chromium'&&process.platform==='darwin'){const client=await page.context().newCDPSession(page);await client.send('DOM.enable');await client.send('CSS.enable');const{root}=await client.send('DOM.getDocument');const{nodeId}=await client.send('DOM.querySelector',{nodeId:root.nodeId,selector:'#pages .screenplay-emoji'});const{fonts}=await client.send('CSS.getPlatformFontsForNode',{nodeId});expect(fonts.some(f=>f.familyName==='Apple Color Emoji'&&f.glyphCount>0)).toBe(true);}
  const span=page.locator(`[data-element-id="${fixture.target}"] .screenplay-emoji`).first();await span.scrollIntoViewIfNeeded();const box=await span.boundingBox();for(const x of[box.x+.5,box.x+box.width-.5]){await page.mouse.click(x,box.y+box.height/2);expect(await page.evaluate(()=>window.scriptForge.getSelection().focus.id)).toBe(fixture.target);}
- await page.screenshot({path:'test-results/native-emoji-editor.png'});await page.reload();await page.locator('#recover-changes').click();await page.locator('#pages[contenteditable=true]').waitFor();expect(await page.locator('#pages .screenplay-emoji').count()).toBe(2);
+ await page.screenshot({path:'test-results/native-emoji-editor.png'});await page.reload();await page.locator('#pages[contenteditable=true]').waitFor();await page.locator('#pages[contenteditable=true]').waitFor();expect(await page.locator('#pages .screenplay-emoji').count()).toBe(2);
  
 });
 test('native editor emoji and PDF artwork keep identical wrapping and exact exported sequences',async({page},info)=>{

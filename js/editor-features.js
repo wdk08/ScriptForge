@@ -201,6 +201,7 @@ export function setupEditorFeatures({ root, repository, getDocument: currentDocu
       await capture('Before Restore', original);
       if (getDocument() !== original) throw new Error('The screenplay changed. Review the restore again.');
       await apply({ type: 'restoreVersion', document: { ...structuredClone(item.document), id: original.id }, safetyCaptured: true });
+      if (getDocument() === original) return;
       $('restore-confirm-dialog').close(); $('versions-dialog').close(); notify('Version restored. The previous screenplay is retained in Version History.');
     } catch (error) { backupError(error); } finally { $('restore-confirm').disabled = false; }
   };

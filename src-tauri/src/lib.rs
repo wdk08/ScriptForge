@@ -1,3 +1,4 @@
+mod managed_library;
 mod storage;
 mod updates;
 use serde_json::{json, Value};
@@ -21,12 +22,25 @@ struct DesktopState {
     closing: AtomicBool,
     files: Mutex<NativeFiles>,
     backups: Mutex<NativeBackups>,
+    library: managed_library::ManagedLibrary,
 }
 fn locked() -> Failure {
     Failure::new(
         "StorageError",
         "Native storage is temporarily unavailable. Your editor content is preserved.",
     )
+}
+
+fn is_dev_app(app: &tauri::AppHandle) -> bool {
+    tauri::is_dev() && app.config().identifier == "com.scriptforge.dev"
+}
+fn dev_screenplays(app: &tauri::AppHandle) -> storage::Result<PathBuf> {
+    let root = app.path().app_data_dir().map_err(|e| Failure::new("StorageError",e.to_string()))?.join("sandbox/screenplays");
+    if root.is_symlink() || root.parent().is_some_and(|parent| parent.is_symlink()) {
+        return Err(Failure::new("StorageError", "The Dev sandbox cannot be redirected."));
+    }
+    std::fs::create_dir_all(&root)?;
+    Ok(root)
 }
 
 #[tauri::command]
@@ -37,7 +51,11 @@ async fn desktop_local(
     body: Value,
 ) -> storage::Result<Value> {
     match action.as_str() {
+        "library-get" | "library-list" | "library-put" => state.library.run(&action, &body),
         "choose-folder" => {
+            if is_dev_app(&app) {
+                return state.files.lock().map_err(|_| locked())?.grant(dev_screenplays(&app)?, "directory");
+            }
             let mut dialog = app
                 .dialog()
                 .file()
@@ -59,7 +77,7 @@ async fn desktop_local(
                 .map_err(|_| locked())?
                 .grant(path, "directory")
         }
-        "open-file" => {
+        "open-file" | "import-file" => {
             let mut dialog = app
                 .dialog()
                 .file()
@@ -73,7 +91,9 @@ async fn desktop_local(
                 .ok_or_else(|| Failure::new("AbortError", "File selection cancelled."))?
                 .into_path()
                 .map_err(|error| Failure::new("FilePermissionError", error.to_string()))?;
+            if action == "import-file" { return storage::plain_file(&path); }
             let mut files = state.files.lock().map_err(|_| locked())?;
+            if is_dev_app(&app) { return files.import_copy(&path); }
             let handle = files.grant(path, "file")?;
             let mut result = files.run("read", &json!({"handle":handle}))?;
             result["handle"] = handle;
@@ -108,6 +128,16 @@ async fn desktop_export(
         || !(name.to_lowercase().ends_with(".pdf") || name.to_lowercase().ends_with(".fountain"))
     {
         return Err(Failure::new("Error", "Invalid export filename."));
+    }
+    if is_dev_app(&app) {
+        let root = app.path().app_data_dir().map_err(|e| Failure::new("StorageError",e.to_string()))?.join("sandbox/exports");
+        if root.is_symlink() || root.parent().is_some_and(|parent| parent.is_symlink()) {
+            return Err(Failure::new("StorageError", "The Dev export directory cannot be redirected."));
+        }
+        std::fs::create_dir_all(&root)?;
+        let path = root.join(format!("{}-{}", uuid::Uuid::new_v4(),name));
+        storage::export_dev_copy(&path, &bytes)?;
+        return Ok(json!({"kind":"export","name":path.file_name().unwrap_or_default().to_string_lossy()}));
     }
     let extension = if name.to_lowercase().ends_with(".pdf") {
         "pdf"
@@ -201,6 +231,12 @@ fn desktop_diagnostics_report(
     state: tauri::State<'_, DesktopState>,
     report: Value,
 ) -> storage::Result<()> {
+    if is_dev_app(&app) && std::env::var("SCRIPTFORGE_DEV_CHECK").as_deref() == Ok("1") {
+        eprintln!("SCRIPTFORGE_DEV_CHECK: {}",report);
+        state.closing.store(true, Ordering::SeqCst);
+        app.exit(if report["success"] == true {0} else {1});
+        return Ok(());
+    }
     let smoke = state
         .smoke
         .as_ref()
@@ -229,6 +265,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updates::Updates::default())
         .setup(|app| {
+            if tauri::is_dev() && app.config().identifier != "com.scriptforge.dev" && std::env::var_os("SCRIPTFORGE_DESKTOP_SMOKE_ROOT").is_none() {
+                return Err("Use npm run desktop:dev: interactive development requires the isolated ScriptForge Dev identity.".into());
+            }
             let smoke_root = std::env::var_os("SCRIPTFORGE_DESKTOP_SMOKE_ROOT").map(PathBuf::from);
             if let Some(root) = &smoke_root {
                 if !root.is_dir()
@@ -247,7 +286,12 @@ pub fn run() {
             } else {
                 app.path().app_data_dir()?
             };
+            if is_dev_app(app.handle()) && (root.is_symlink()
+                || root.join("file-grants.json").is_symlink() || root.join("backups").is_symlink()) {
+                return Err("Dev application data must not be redirected to another application's storage.".into());
+            }
             let mut files = NativeFiles::new(root.clone()).map_err(|error| error.message)?;
+            if is_dev_app(app.handle()) { files.restrict_to(dev_screenplays(app.handle()).map_err(|e| e.message)?) .map_err(|e| e.message)?; }
             let smoke = if let Some(root) = smoke_root {
                 std::fs::create_dir_all(root.join("scripts"))?;
                 let directory = files
@@ -263,17 +307,23 @@ pub fn run() {
             };
             let backups =
                 NativeBackups::new(root.join("backups")).map_err(|error| error.message)?;
+            let library = managed_library::ManagedLibrary::new(&root, is_dev_app(app.handle())).map_err(|error| error.message)?;
             app.manage(DesktopState {
                 smoke,
                 closing: AtomicBool::new(false),
                 files: Mutex::new(files),
                 backups: Mutex::new(backups),
+                library,
             });
             updates::menu(app.handle())?;
             Ok(())
         })
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                if is_dev_app(webview.app_handle()) && std::env::var("SCRIPTFORGE_DEV_CHECK").as_deref() == Ok("1") {
+                    let script = include_str!("../../scripts/dev-check.js");
+                    let _ = webview.eval(script);
+                }
                 if let Some(state) = webview.try_state::<DesktopState>() {
                     if let Some(smoke) = &state.smoke {
                         if std::env::var_os("SCRIPTFORGE_IMPORT_STRESS").is_some() {
@@ -315,7 +365,15 @@ pub fn run() {
             desktop_diagnostics_pdf,
             desktop_diagnostics_report
         ])
-        .build(tauri::generate_context!())
+        .build({
+            let mut context = tauri::generate_context!();
+            if tauri::is_dev() && context.config().identifier == "com.scriptforge.dev" {
+                // Configure in Rust: this Tauri version emits a Vec instead of an array
+                // when dataStoreIdentifier is supplied through JSON code generation.
+                context.config_mut().app.windows[0].data_store_identifier = Some([83,70,68,101,118,17,65,50,139,17,17,0,0,0,0,1]);
+            }
+            context
+        })
         .expect("ScriptForge could not start")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {

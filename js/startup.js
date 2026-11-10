@@ -5,7 +5,7 @@ const entry = document.querySelector('script[data-entry]').dataset.entry;
 try {
   setupBrowserFeatures();
   await setupDesktopLifecycle();
-  await import(entry === 'editor' ? './editor.js' : './home.js');
+  await import(/* @vite-ignore */ entry === 'editor' ? './editor.js' : './home.js');
   // Update initialization is independent of screenplay startup and never awaited here.
   void import('./updates.js').then(module => module.setupUpdates()).catch(error => console.warn('Update controls unavailable:', error.message));
 } catch (error) {

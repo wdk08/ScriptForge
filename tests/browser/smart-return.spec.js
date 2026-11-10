@@ -63,7 +63,7 @@ test('split near a dialogue page boundary repaginates, retains continuations and
  expect(proof.pdfPages).toBe(proof.editorPages+1);expect(proof.hasContinued).toBe(true);
  // Existing export renders continuation markers, so compare the actual speech halves.
  expect(proof.roundText).toContain(els[2].text);expect(proof.roundText).toContain(els[3].text);
- await page.reload();await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect(await doc(page)).toEqual(after);
+ await page.reload();await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect(await doc(page)).toEqual(after);
  expect((await caret(page)).dom.focus).toEqual({id:els[3].id,offset:0});
 });
 

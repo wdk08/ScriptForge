@@ -17,7 +17,7 @@ test('card menu exports recovery edits, confirms deletion, persists removal and 
   expect(await readFile(await file.path(), 'utf8')).toContain('This latest draft can be exported.');
   await expect(page).toHaveURL(/index.html$/);
   await page.getByLabel('Options for Untitled Screenplay').click(); await page.locator('.delete-script').click();
-  await expect(page.locator('#delete-script-dialog')).toContainText('file on your computer stays intact');
+  await expect(page.locator('#delete-script-dialog')).toContainText('original files and exported copies stay on your computer');
   await page.locator('#cancel-delete-script').click(); await expect(page.locator('.script-card')).toHaveCount(1);
   await page.getByLabel('Options for Untitled Screenplay').click(); await page.locator('.delete-script').click(); await page.locator('#confirm-delete-script').click();
   await expect(page.locator('.script-card')).toHaveCount(0); await page.locator('#undo-delete-script').click();

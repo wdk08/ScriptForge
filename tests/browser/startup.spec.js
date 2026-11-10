@@ -21,7 +21,7 @@ for (const failure of ['constructor', 'send']) {
     await expect(page.locator('#pages')).toContainText('TEST');
     await page.locator('#home').click();
     await expect(page.locator('.card-title')).toHaveText('The Last Signal');
-    await page.locator('.card-title').click(); await page.locator('#recover-changes').click();
+    await page.locator('.card-title').click(); await page.locator('#pages[contenteditable=true]').waitFor();
     await expect(page.locator('#pages')).toContainText('TEST');
     expect(errors).toEqual([]);
     if (failure === 'constructor') await page.screenshot({ path: 'test-results/editor-startup-restored.png', fullPage: true });

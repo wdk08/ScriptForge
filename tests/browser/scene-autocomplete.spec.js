@@ -8,7 +8,7 @@ async function open(page) {
     const elements = ['INT. HOSPITAL ROOM - DAY', 'INT. HOSPITAL HALLWAY - NIGHT', 'INT. HOSPITAL ROOM - NIGHT', 'EXT. HOSPITAL ENTRANCE - DAY', "INT. MOTHER-IN-LAW'S HOUSE - DAY", 'INT./EXT. CAR - DAY', 'I/E. BOAT - DAY'].flatMap(text => [el('scene', text), el('action', 'A quiet moment.')]); elements.push(el('character', 'NOAH'), el('dialogue', 'Hello.'), el('action', ''));
     return (await repository.put(draftRecord(createDocument({ elements })))).id;
   });
-  await page.goto(`/editor.html?id=${id}`); await page.locator('#recover-changes').click(); await expect(page.locator('#pages')).toContainText('NOAH');
+  await page.goto(`/editor.html?id=${id}`); await page.locator('#pages[contenteditable=true]').waitFor(); await expect(page.locator('#pages')).toContainText('NOAH');
 }
 const doc = page => page.evaluate(() => window.scriptForge.getDocument());
 async function position(page, id, offset, end = offset) { await page.evaluate(async ({ id, offset, end }) => { const { restoreSelection } = await import('/js/selection.js'); restoreSelection(document.getElementById('pages'), { anchor: { id, offset }, focus: { id, offset: end } }, { scroll: true }); }, { id, offset, end }); }
@@ -24,18 +24,17 @@ test('File and Tools share dropdown behavior and keyboard navigation, and launch
   await tools.locator('summary').click(); await page.locator('#document-title').click(); await expect(tools).not.toHaveAttribute('open', ''); expect(await doc(page)).toEqual(before);
   expect(await page.locator('#simulate-table-read').count()).toBe(1); expect(await page.locator('#rename-character').count()).toBe(1);
 });
-test('Settings hosts the same Voice Library and folder controls, retains preferences, and voice renaming preserves model bytes and IDs', async ({ page }) => {
+test('Settings hosts the same Voice Library and writing preferences, retains preferences, and voice renaming preserves model bytes and IDs', async ({ page }) => {
   await open(page); const before = await doc(page);
   await page.evaluate(async () => {
     const { repository } = await import('/js/storage.js'), { voiceStore } = await import('/js/voice-storage.js');
     await repository.setPreference('screenplayFolder', { kind: 'directory', name: 'Existing ScriptForge Folder' });
     await voiceStore().add({ id: 'settings-test', fingerprint: 'settings-test-fingerprint', modelHash: 'unchanged', model: new Blob([new Uint8Array([1, 2, 3])]), config: { num_speakers: 1, espeak: { voice: 'en-us' } }, name: 'Existing Voice', size: 3 });
   });
-  await page.locator('#screenplay-settings').click(); await expect(page.locator('#settings-folder-name')).toHaveText('Existing ScriptForge Folder'); await expect(page.locator('.editing-bar #voice-library')).toHaveCount(0); await expect(page.locator('.editing-bar #screenplay-folder')).toHaveCount(0);
-  await page.locator('#screenplay-folder').click(); await expect(page.locator('#folder-dialog')).toBeVisible(); await page.locator('#folder-close').click(); await expect(page.locator('#screenplay-settings-dialog')).toBeVisible();
+  await page.locator('#screenplay-settings').click(); await expect(page.getByText('Writing Preferences', { exact: true })).toBeVisible(); await expect(page.locator('.editing-bar #voice-library')).toHaveCount(0); await expect(page.locator('.editing-bar #screenplay-folder')).toHaveCount(0);
   await page.locator('#voice-library').click(); await expect(page.locator('#voice-library-dialog')).toBeVisible(); await expect(page.locator('.vl-card h3')).toHaveText('Existing Voice');
   await page.getByLabel('Rename imported Existing Voice', { exact: true }).click(); await page.getByLabel('New voice name for Existing Voice', { exact: true }).fill('Renamed Voice'); await page.getByRole('button', { name: 'Save name', exact: true }).click(); await expect(page.locator('.vl-card h3')).toHaveText('Renamed Voice'); await page.locator('#vl-close').click(); await expect(page.locator('#voice-library')).toBeFocused();
-  await page.locator('#settings-done').click(); await page.locator('#screenplay-settings').click(); await expect(page.locator('#settings-folder-name')).toHaveText('Existing ScriptForge Folder'); await page.locator('#settings-done').click();
+  await page.locator('#settings-done').click(); await page.locator('#screenplay-settings').click(); await expect(page.getByText('Writing Preferences', { exact: true })).toBeVisible(); await page.locator('#settings-done').click();
   const saved = await page.evaluate(async () => { const { repository } = await import('/js/storage.js'), { voiceStore } = await import('/js/voice-storage.js'); const record = await voiceStore().get('settings-test'); return { folder: await repository.getPreference('screenplayFolder'), voice: { id: record.id, fingerprint: record.fingerprint, bytes: [...new Uint8Array(await record.model.arrayBuffer())], name: record.name } }; });
   expect(saved.folder.name).toBe('Existing ScriptForge Folder'); expect(saved.voice).toEqual({ id: 'settings-test', fingerprint: 'settings-test-fingerprint', bytes: [1, 2, 3], name: 'Renamed Voice' }); expect(await doc(page)).toEqual(before);
 });
@@ -68,6 +67,6 @@ for(const accept of ['mouse','Enter'])test(`lowercase saved/imported locations d
  const options=page.locator('#scene-autocomplete').getByRole('option');await expect(options).toHaveText(['INT. CALLAHAN HOUSE','INT. CALLAHAN HOSPITAL']);
  if(accept==='mouse')await options.first().click();else{await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');}
  expect((await doc(page)).elements.at(-1).text).toBe('INT. CALLAHAN HOUSE - ');
- await page.locator('#home').click();await page.locator('.card-title').click();await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');
+ await page.locator('#home').click();await page.locator('.card-title').click();await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');
  const scene=(await doc(page)).elements.at(-1);await position(page,scene.id,0,scene.text.length);await page.keyboard.type('iNt. ca');await expect(options).toHaveText(['INT. CALLAHAN HOUSE','INT. CALLAHAN HOSPITAL']);
 });

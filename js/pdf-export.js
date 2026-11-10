@@ -45,12 +45,12 @@ export async function createScreenplayPDF(document) {
   const [PDF, regular, bold, unicode, unicodeBold,italic,boldItalic,unicodeItalic,unicodeBoldItalic] = await Promise.all([pdfLibrary(), fontData('Regular'), fontData('Bold'), fontData('', 'DejaVuSansMono'), fontData('Bold', 'DejaVuSansMono'),fontData('Italic'),fontData('BoldItalic'),fontData('Oblique','DejaVuSansMono'),fontData('BoldOblique','DejaVuSansMono'), ensureScreenplayFonts()]);
   const doc = printableDocument(document);
   const title = titlePageFields(doc);
-  validatePDFCharacters(doc,title);
-  const emojiImages=await prepareEmoji([...doc.elements.map(el=>el.text),...Object.values(title)]);
+  const { images: emojiImages, fallback } = await prepareEmoji([...doc.elements.map(el=>el.text),...Object.values(title)]);
+  validatePDFCharacters(doc, title, emojiImages);
   const measure = window.document.createElement('div'); measure.className = 'measurement pdf-measure'; measure.setAttribute('aria-hidden', 'true'); window.document.body.append(measure);
   let pages, baseline, boldBaseline, unicodeBaseline, unicodeBoldBaseline;
   try {
-    pages = paginate(layoutUnits(doc, createMeasurer(measure,{emojiRenderer:'pdf'})));
+    pages = paginate(layoutUnits(doc, createMeasurer(measure)));
     baseline = fontBaseline(measure); boldBaseline = fontBaseline(measure, FORMAT.fontSize, FORMAT.lineHeight, true);
     unicodeBaseline = fontBaseline(measure, FORMAT.fontSize*UNICODE_SCALE, FORMAT.lineHeight, false, 'ScriptForge Unicode');
     unicodeBoldBaseline = fontBaseline(measure, FORMAT.fontSize*UNICODE_SCALE, FORMAT.lineHeight, true, 'ScriptForge Unicode');
@@ -79,7 +79,7 @@ export async function createScreenplayPDF(document) {
     const glyphs = [...new Set(Object.values(metadata.cmap.unicode.codeMap))];
     metadata.Unicode.widths = glyphs.flatMap(glyph => [glyph, [metadata.widthOfGlyph(glyph)]]);
   }
-  pdf.setProperties({ title: doc.title, creator: 'ScriptForge',subject:'Emoji artwork: Twemoji 17.0.3, Twitter, Inc. and contributors; CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ https://github.com/jdecked/twemoji' });
+  pdf.setProperties({ title: doc.title, creator: 'ScriptForge',subject:fallback.size ? 'Emoji fallback artwork: Twemoji 17.0.3, Twitter, Inc. and contributors; CC BY 4.0 https://creativecommons.org/licenses/by/4.0/ https://github.com/jdecked/twemoji' : 'ScriptForge screenplay' });
   const byId = new Map(doc.elements.map(el => [el.id, el]));
   const scale = .75;
   pdf.setFont('CourierPrime', 'normal'); pdf.setFontSize(12);
@@ -140,7 +140,7 @@ export async function createScreenplayPDF(document) {
       y += item.bodyHeight + item.moreHeight;
     }
   });
-  return { blob: pdf.output('blob'), pages: pages.length + 1, name: fountainFilename(doc.title).replace(/\.fountain$/, '.pdf') };
+  return { blob: pdf.output('blob'), emojiFallback: [...fallback], pages: pages.length + 1, name: fountainFilename(doc.title).replace(/\.fountain$/, '.pdf') };
 }
 export async function exportPDF(document) {
   const result = await createScreenplayPDF(document);

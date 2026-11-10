@@ -1,3 +1,4 @@
+import { ruleKey, writingPreferences } from './writing-preferences.js';
 import { characterIdentity } from './table-read-model.js';
 import { hasScenePrefix } from './scene-locations.js';
 import { isCommonTransition } from './transitions.js';
@@ -12,4 +13,11 @@ export function extendedCue(text) {
     && !hasScenePrefix(base) && !isCommonTransition(base)
     && !(base !== base.toUpperCase() && /^(?:a|an|the|he|she|they|it|we)\b/i.test(base))
     && !/\b(?:walks?|runs?|looks?|sits?|stands?|enters?|exits?|leaves?|turns?|watches?|opens?|closes?|smiles?|nods?|holds?|takes?|moves?|says?|pauses?|waits?)\b/i.test(base);
+}
+
+export const builtInDialogueTags = ['(V.O.)', '(O.S.)', '(O.C.)', "(CONT'D)"];
+export function trainedCue(text) {
+  if (!extendedCue(text)) return false;
+  const tags = text.trim().replace(/\s*\^$/, '').match(/\([^()\n]+\)/gu) ?? [];
+  return tags.some(tag => writingPreferences().tags.includes(ruleKey(tag)));
 }

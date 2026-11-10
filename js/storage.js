@@ -154,6 +154,15 @@ export function createRepository(factory, name = 'scriptforge', { timeoutMs = 80
             if ((previous?.revision ?? null) !== expectedRevision) throw new StorageConflictError();
             result = { ...record, revision: (previous?.revision ?? 0) + 1 };
             store.put(result);
+            if (record.managed) {
+              const verified = store.get(record.id);
+              verified.onsuccess = () => {
+                if (JSON.stringify(verified.result) !== JSON.stringify(result)) {
+                  conflict = new Error('Could not verify the saved screenplay.');
+                  transaction.abort();
+                }
+              };
+            }
           } catch (error) {
             conflict = error; transaction.abort();
           }

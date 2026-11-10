@@ -29,7 +29,7 @@ test('point shortcuts preserve caret, selection, left edges, recovery, backups, 
  });
  expect(proof.writes.map(({text,page})=>({text,page}))).toEqual(proof.expected);expect(proof.pages).toBe(proof.editorPages+1);expect(proof.safe).toBe(true);
  const download=page.waitForEvent('download');await page.evaluate(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(window.marginProof);a.download='Margins.pdf';a.click();});await(await download).saveAs('test-results/element-margins.pdf');
- await page.reload();await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect((await page.evaluate(()=>window.scriptForge.getDocument())).elements.filter(e=>e.rightMarginOffsetPt).map(e=>e.id)).toEqual(els.slice(0,3).map(e=>e.id));
+ await page.reload();await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect((await page.evaluate(()=>window.scriptForge.getDocument())).elements.filter(e=>e.rightMarginOffsetPt).map(e=>e.id)).toEqual(els.slice(0,3).map(e=>e.id));
  await page.locator('[data-title-field=email]').focus();await page.keyboard.press('ControlOrMeta+[');expect((await page.evaluate(()=>window.scriptForge.getDocument())).elements.filter(e=>e.rightMarginOffsetPt).length).toBe(3);
 });
 test('Shift Return has ordinary line height, keeps one element, survives Fountain and removes with Backspace',async({page})=>{
@@ -44,7 +44,7 @@ test('Shift Return has ordinary line height, keeps one element, survives Fountai
   await page.keyboard.press('ControlOrMeta+z');await page.keyboard.press('ControlOrMeta+[');expect(await page.evaluate(id=>window.scriptForge.getDocument().elements.find(e=>e.id===id).text,el.id)).toContain('\n');
  }
  const round=await page.evaluate(async()=>{const doc=window.scriptForge.getDocument(),source=await(await import('/js/session.js')).fountainForSaving(doc),parsed=(await import('/js/fountain.js')).parseFountain(source);return {before:doc.elements.filter(e=>['action','dialogue'].includes(e.type)).map(e=>e.text),after:parsed.elements.filter(e=>['action','dialogue'].includes(e.type)).map(e=>e.text),source};});expect(round.after).toEqual(round.before);expect(round.source).not.toMatch(/rightMarginOffsetPt|↵|¶/);
- await page.locator('#home').click();await page.locator('.card-title').click();await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect((await page.evaluate(()=>window.scriptForge.getDocument())).elements.find(e=>e.id===action.id).text).toContain('\n');
+ await page.locator('#home').click();await page.locator('.card-title').click();await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect((await page.evaluate(()=>window.scriptForge.getDocument())).elements.find(e=>e.id===action.id).text).toContain('\n');
 });
 
 test('only a chosen dialogue can be widened to fit the dinosaurs example',async({page})=>{

@@ -7,24 +7,9 @@ const fixture = fileURLToPath(new URL('../fixtures/complex.fountain', import.met
 async function fallback(page) {
   await page.addInitScript(() => { window.showOpenFilePicker = undefined; window.showSaveFilePicker = undefined; window.showDirectoryPicker = undefined; });
 }
-async function native(context) {
-  await context.addInitScript(() => {
-    window.showDirectoryPicker = undefined;
-    const ready = (async () => {
-      const directory = await navigator.storage.getDirectory();
-      const handle = await directory.getFileHandle('Connected.fountain', { create: !sessionStorage.getItem('fixture-created') });
-      if (!(await handle.getFile()).size) { const writer = await handle.createWritable(); await writer.write('Title: Connected Film\n\nINT. ROOM - DAY\n\nOriginal action.\n'); await writer.close(); }
-      sessionStorage.setItem('fixture-created', 'true'); return { directory, handle };
-    })();
-    window.fileFixture = { ready };
-    ready.catch(() => {});
-    window.showOpenFilePicker = async () => [(await ready).handle];
-    window.showSaveFilePicker = async () => (await ready).handle;
-  });
-}
 async function importCopy(page) {
   await page.goto('/');
-  const chooser = page.waitForEvent('filechooser'); await page.locator('#import-copy').click();
+  const chooser = page.waitForEvent('filechooser'); await page.locator('#open-fountain').click();
   await (await chooser).setFiles(fixture);
   await expect(page.locator('.screenplay-page').first()).toBeVisible();
 }
@@ -37,14 +22,8 @@ async function editAction(page, text = 'Changed action.') {
     document.getElementById('pages').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   }, text);
 }
-async function recovered(page) { await expect(page.locator('#recovery-dialog')).toBeVisible(); await page.locator('#recover-changes').click(); }
+async function recovered(page) { await page.locator('#pages[contenteditable=true]').waitFor(); }
 async function recoverySaved(page) { await expect.poll(() => page.evaluate(() => window.scriptForge?.getFileState()?.recoveryCurrent)).toBe(true); }
-async function openNative(page) {
-  await page.goto('/'); await page.locator('#open-fountain').click();
-  await expect(page.locator('#document-title')).toHaveValue('Connected Film');
-  await expect(page.locator('.screenplay-page').first()).toBeVisible();
-}
-
 test('homepage creates a persistent draft, searches recents and resumes recovery', async ({ page }) => {
   await fallback(page); await page.goto('/');
   await expect(page.locator('#empty-state')).toBeVisible(); await page.locator('#new-screenplay').click();
@@ -73,85 +52,33 @@ test('copy import retains original source while portable export preserves screen
   }, { output, original });
   expect(comparison.exported).toEqual(comparison.imported); expect(comparison.cached).toBe(original);
   expect(output).toContain('@NOAH (on radio)'); expect(output).not.toContain('ScriptForge continuations');
-  await expect(page.locator('#document-banner')).toContainText('browser copy');
+  await expect(page.locator('#save-state')).toContainText('Saved in this browser');
 });
-test('reload offers recovery and restores model IDs, text and selection without changing a file', async ({ page }) => {
+test('reload restores model IDs, text and selection without changing a file', async ({ page }) => {
   await fallback(page); await importCopy(page); await editAction(page, 'Recovered <b>plain text</b>.'); await recoverySaved(page);
   const before = await page.evaluate(() => ({ doc: window.scriptForge.getDocument(), selection: window.scriptForge.getSelection() }));
   page.on('dialog', dialog => dialog.accept()); await page.reload(); await recovered(page);
   expect(await page.evaluate(() => window.scriptForge.getDocument())).toEqual(before.doc);
   expect(await page.evaluate(() => window.scriptForge.getSelection())).toEqual(before.selection);
-  await expect(page.locator('#document-banner')).toContainText('Recovered unsaved changes');
+  await expect(page.locator('#save-state')).toContainText('Saved in this browser');
   expect(await page.locator('#pages b').count()).toBe(0);
 });
 test('Export downloads a copy without claiming the draft was saved to disk', async ({ page }) => {
   await fallback(page); await importCopy(page); await editAction(page, 'A downloaded revision.');
   const download = page.waitForEvent('download'); await page.locator('#export').click(); await page.locator('#export-fountain').click(); await download;
-  expect(await page.evaluate(() => window.scriptForge.getFileState().dirty)).toBe(true);
-  await expect(page.locator('#file-autosave')).toBeChecked();
-  await expect(page.locator('#file-autosave')).toBeDisabled();
+  await expect(page.locator('#save-state')).toContainText('Saved in this browser');
   await expect(page.locator('#save')).toBeVisible(); await expect(page.locator('#save-as')).toHaveCount(0);
   await page.locator('#home').click(); await page.locator('.card-title').click(); await recovered(page);
   await expect(page.locator('#pages')).toContainText('A downloaded revision.');
-});
-test('actual structured-cloned handles reopen and direct Save updates the selected file', async ({ page, context }) => {
-  await native(context); await openNative(page); await editAction(page, 'Direct file revision.');
-  await expect.poll(() => page.evaluate(() => window.scriptForge.getFileState().dirty)).toBe(false);
-  const source = await page.evaluate(async () => (await (await window.fileFixture.ready).handle.getFile()).text());
-  expect(source).toContain('Direct file revision.');
-  await page.locator('#home').click(); await expect(page.locator('.file-badge')).toHaveText('LINKED LOCAL FILE');
-  await page.locator('.card-title').click(); await expect(page.locator('#pages')).toContainText('Direct file revision.');
-  expect(await page.evaluate(() => window.scriptForge.getFileState().fileName)).toBe('Connected.fountain');
-});
-test('outside changes stop Save and reviewed replacement never happens automatically', async ({ page, context }) => {
-  await native(context); await openNative(page); await editAction(page, 'My revision.');
-  await page.evaluate(async () => { const { handle } = await window.fileFixture.ready; const writer = await handle.createWritable(); await writer.write('Outside writer edit.\n'); await writer.close(); });
-  await expect(page.locator('#review-file-error')).toBeVisible({ timeout: 7000 });
-  await page.locator('#review-file-error').click(); await expect(page.locator('#file-conflict-dialog')).toBeVisible();
-  await expect(page.locator('#disk-version')).toHaveValue('Outside writer edit.\n');
-  expect(await page.evaluate(async () => (await (await window.fileFixture.ready).handle.getFile()).text())).toBe('Outside writer edit.\n');
-  await page.locator('#conflict-overwrite').click();
-  await expect.poll(() => page.evaluate(() => window.scriptForge.getFileState().dirty)).toBe(false);
-  expect(await page.evaluate(async () => (await (await window.fileFixture.ready).handle.getFile()).text())).toContain('My revision.');
-});
-test('Export keeps the linked file identity and autosaving stays enabled', async ({ page, context }) => {
-  await native(context); await openNative(page);
-  const originalId = await page.evaluate(() => window.scriptForge.getDocument().id);
-  await editAction(page, 'Autosaved revision.');
-  await expect.poll(async () => page.evaluate(async () => (await (await window.fileFixture.ready).handle.getFile()).text())).toContain('Autosaved revision.');
-  const download = page.waitForEvent('download'); await page.locator('#export').click(); await page.locator('#export-fountain').click(); await download;
-  expect(await page.evaluate(() => window.scriptForge.getDocument().id)).toBe(originalId);
-  await expect(page.locator('#file-autosave')).toBeChecked(); await expect(page.locator('#file-autosave')).toBeDisabled();
-  await editAction(page, 'Second automatic revision.');
-  await expect.poll(async () => page.evaluate(async () => (await (await window.fileFixture.ready).handle.getFile()).text())).toContain('Second automatic revision.');
-  expect(await page.evaluate(() => window.scriptForge.getFileState().fileName)).toBe('Connected.fountain');
-  await page.locator('#home').click(); await expect(page.locator('.script-card')).toHaveCount(1);
-});
-test('a missing file opens a cached copy with a clear error rather than discarding the screenplay', async ({ page, context }) => {
-  await native(context); await openNative(page);
-  await page.evaluate(async () => { const { directory } = await window.fileFixture.ready; await directory.removeEntry('Connected.fountain'); });
-  await page.locator('#home').click(); await page.locator('.card-title').click();
-  await expect(page.locator('#document-banner')).toContainText('moved or deleted');
-  await expect(page.locator('#recreate-file')).toBeVisible();
-  await expect(page.locator('#pages')).toContainText('Original action.');
 });
 test('storage failure is visible and does not erase a previously committed recovery', async ({ page }) => {
   await fallback(page); await importCopy(page); await editAction(page, 'First recovery.'); await recoverySaved(page);
   await page.evaluate(async () => { const { repository } = await import('/js/storage.js'); repository.put = async () => { throw new DOMException('Storage full', 'QuotaExceededError'); }; });
   await editAction(page, 'New text stays in memory.');
-  await expect(page.locator('#document-banner')).toContainText('Recovery could not be saved');
+  await expect(page.locator('#document-banner')).toContainText('Could not save');
   await expect(page.locator('#pages')).toContainText('New text stays in memory.');
   const previous = await page.evaluate(async () => { const { repository } = await import('/js/storage.js'); return (await repository.get(window.scriptForge.getFileState().id)).recovery.document.elements.find(el => el.type === 'action').text; });
   expect(previous).toBe('First recovery.');
-});
-test('saved-version choice keeps the unsaved recovery as a separate recent entry', async ({ page }) => {
-  await fallback(page); await importCopy(page); await editAction(page, 'Keep my recovery.'); await recoverySaved(page);
-  const originalId = await page.evaluate(() => window.scriptForge.getDocument().id);
-  page.on('dialog', dialog => dialog.accept()); await page.reload(); await page.locator('#open-saved').click();
-  await expect(page.locator('.screenplay-page').first()).toBeVisible();
-  await expect(page.locator('#pages')).not.toContainText('Keep my recovery.');
-  const retained = await page.evaluate(async id => { const { repository } = await import('/js/storage.js'); return (await repository.get(id)).recovery.document.elements.find(el => el.type === 'action').text; }, originalId);
-  expect(retained).toBe('Keep my recovery.');
 });
 test('homepage renders useful previews and fits mobile', async ({ page }) => {
   await fallback(page); await importCopy(page); await page.locator('#home').click();

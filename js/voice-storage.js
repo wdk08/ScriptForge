@@ -1,6 +1,7 @@
 const hydrate = record => record && record.model instanceof ArrayBuffer ? { ...record, model: new Blob([record.model], { type: 'application/octet-stream' }) } : record;
 /** Separate model database: screenplay records and recovery stores are untouched. */
 export function createVoiceStore(factory, name = 'scriptforge-voices') {
+  name = (globalThis.scriptForgeDiagnosticDatabasePrefix ?? '') + name;
   if (factory === undefined) { try { factory = globalThis.indexedDB; } catch { factory = null; } }
   let opening; const listeners = new Set(); let channel;
   try { if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(`${name}:changes`); } catch {}

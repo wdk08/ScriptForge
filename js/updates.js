@@ -109,6 +109,7 @@ async function initializeUpdates(environment){
   environment.addEventListener('pageshow',event=>{if(event.persisted){active=true;controller.cancelled=false;void attach().catch(console.error);}});
   await attach();
   await controller.initialize();
-  environment.setTimeout(()=>{if(active)void controller.check(true);},1000);
+  if(environment.scriptForgeDev){about.querySelector('h1').textContent='ScriptForge Dev';about.querySelector('[data-about-check]').disabled=true;}
+  else environment.setTimeout(()=>{if(active)void controller.check(true);},1000);
   return controller;
 }

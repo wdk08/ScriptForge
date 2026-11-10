@@ -19,7 +19,7 @@ async function start(page, value = text) {
   }, value);
 }
 async function menu(page, name, id) { await page.locator(`.${name}-menu > summary`).click(); await page.locator(`#${id}`).click(); }
-async function recover(page) { await expect.poll(async () => await page.locator('#recovery-dialog').isVisible() || await page.locator('#pages').getAttribute('contenteditable') === 'true').toBe(true); if (await page.locator('#recovery-dialog').isVisible()) await page.locator('#recover-changes').click(); await expect(page.locator('#pages')).toHaveAttribute('contenteditable', 'true'); }
+async function recover(page) { await page.locator('#pages[contenteditable=true]').waitFor(); }
 
 test('Cmd/Ctrl-click continuation preserves extensions, caret, undo, autosave and reopen', async ({ page }) => {
   await start(page);
@@ -154,25 +154,6 @@ test('dark pages and dialogs are readable, system responds, PDF output and pagin
   await page.keyboard.press('ControlOrMeta+f'); await page.locator('#find-query').fill('Hello'); await page.screenshot({ path: 'test-results/final-editor-dark.png' });
   await page.emulateMedia({ media: 'print' }); await expect(page.locator('#title-page')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 });
-test('backup restore retains the existing linked file association and autosaves to that file', async ({ page, browserName }) => {
-  test.skip(browserName === 'webkit', 'Native file handle fixture uses Chromium OPFS; WebKit helper autosaving is covered separately.');
-  await page.addInitScript(() => {
-    window.fixture = navigator.storage.getDirectory().then(async directory => {
-      const handle = await directory.getFileHandle('History.fountain', { create: true });
-      const writer = await handle.createWritable(); await writer.write('INT. ROOM - DAY\n\nOriginal action.'); await writer.close(); return handle;
-    });
-    window.showOpenFilePicker = async () => [await window.fixture];
-  });
-  await page.goto('/'); await page.locator('#open-fountain').click(); await expect(page.locator('#pages')).toHaveAttribute('contenteditable', 'true');
-  const action = await page.evaluate(() => window.scriptForge.getDocument().elements.find(el => el.type === 'action'));
-  await menu(page, 'file', 'version-history'); await expect(page.locator('#version-list label')).toHaveCount(1); await page.locator('#versions-close').click();
-  await select(page, action.id, action.text.length); await page.keyboard.type(' Changed.'); await expect(page.locator('#disk-save-state')).toHaveText('Saved');
-  await menu(page, 'file', 'version-history'); await page.locator('#version-list input').first().check(); await page.locator('#version-restore').click(); await page.locator('#restore-confirm').click(); await expect(page.locator('#versions-dialog')).toBeHidden();
-  await expect(page.locator('#disk-save-state')).toHaveText('Saved');
-  const state = await page.evaluate(async () => ({ file: window.scriptForge.getFileState().fileName, text: await (await (await window.fixture).getFile()).text() }));
-  expect(state.file).toBe('History.fountain'); expect(state.text).toContain('Original action.'); expect(state.text).not.toContain('Changed.');
-});
-
 test('independent backups survive closing and restarting the browser process', async ({ browserName }) => {
   const profile = await mkdtemp(join(tmpdir(), 'scriptforge-backup-restart-'));
   let context;

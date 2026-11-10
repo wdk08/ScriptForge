@@ -29,6 +29,6 @@ for(const position of ['beginning','middle','end'])test(`Action Return at ${posi
   expect(pdf.pages).toBe(2);expect(pdf.writes.filter(w=>w.text.trim()).map(w=>w.text)).toEqual(actions.map(e=>e.text));expect(pdf.writes[1].y-pdf.writes[0].y).toBe(24);expect(pdf.writes.every(w=>w.x===108)).toBe(true);await page.screenshot({path:'test-results/drafting-action-split.png'});
  }
  await page.keyboard.press('ControlOrMeta+z');expect(await page.evaluate(()=>window.scriptForge.getDocument())).toEqual(doc);await page.keyboard.press('ControlOrMeta+Shift+z');expect(await page.evaluate(()=>window.scriptForge.getDocument())).toEqual(split);
- await page.reload();await page.locator('#recover-changes').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect(await page.evaluate(()=>window.scriptForge.getDocument())).toEqual(split);
+ await page.reload();await page.locator('#pages[contenteditable=true]').waitFor();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');expect(await page.evaluate(()=>window.scriptForge.getDocument())).toEqual(split);
   await select(page,actions[0].id,Math.min(3,actions[0].text.length));const before=await page.evaluate(()=>window.scriptForge.getDocument());await page.keyboard.press('Shift+Enter');const soft=await page.evaluate(()=>window.scriptForge.getDocument());expect(soft.elements.length).toBe(before.elements.length);expect(soft.elements.filter(e=>e.type==='action').length).toBe(2);expect(soft.elements.find(e=>e.id===actions[0].id).text).toContain('\n');
 });

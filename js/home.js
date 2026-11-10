@@ -1,14 +1,12 @@
 import {setupWritingStatistics} from './writing-statistics.js';
 import { backups } from './backups.js';
 import { setupVoiceLibrary } from './voice-library.js';
-import { repository } from './storage.js';
+import { libraryRepository as repository } from './managed-library.js';
 import { fileService, fountainFilename } from './files.js';
-import { openFileIntoLibrary, createAutoSavedDraft } from './library.js';
+import { importManagedFile, createDraft } from './library.js';
 import { exportPDF } from './pdf-export.js';
 import { fountainForSaving } from './session.js';
-import { setupFolderSetting } from './folder-settings.js';
 const $ = id => document.getElementById(id);
-const folderSettings = setupFolderSetting($('screenplay-folder'));
 let records = [], errorSource, pendingDelete, undoDelete, suspended = false;
 function error(message, source = 'action') { errorSource = source; $('library-error').hidden = false; $('library-error').textContent = message; }
 const go = id => { location.href = `./editor.html?id=${encodeURIComponent(id)}`; };
@@ -27,7 +25,7 @@ function render() {
     if (!preview.querySelector('p')) { const p = document.createElement('p'); p.className = 'blank-preview'; p.textContent = 'Every story starts somewhere.'; preview.append(p); }
     const body = document.createElement('div'); body.className = 'card-body';
     const label = document.createElement('span'); label.className = `file-badge ${record.recovery?.dirty ? 'has-recovery' : ''}`;
-    label.textContent = !record.fileName ? 'DRAFT · NOT SAVED TO A FILE' : record.recovery?.dirty ? 'UNSAVED CHANGES · RECOVERY AVAILABLE' : record.handle ? 'LINKED LOCAL FILE' : record.downloadOnly ? 'DOWNLOAD COPY' : 'IMPORTED COPY';
+    label.textContent = record.migrationNotice || record.recovery?.dirty && !record.managed ? 'RECOVERY AVAILABLE' : 'SAVED LOCALLY';
     const title = document.createElement('button'); title.className = 'card-title'; title.textContent = record.title;
     const time = document.createElement('time');
     const modified = new Date(record.modifiedAt);
@@ -35,11 +33,10 @@ function render() {
       time.dateTime = modified.toISOString();
       time.textContent = `Edited ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(modified)}`;
     } else time.textContent = 'Recently opened';
-    const filename = document.createElement('div'); filename.className = 'card-filename'; filename.textContent = record.fileName ?? 'Choose Screenplay Folder for disk autosaving';
-    const open = async () => {
-      try { if (record.handle && !record.recovery?.dirty) await fileService.ensurePermission(record.handle, 'read', true); } catch { /* Editor offers reconnection and cached-copy options. */ }
-      go(record.id);
-    };
+    const filename = document.createElement('div');
+    filename.className = 'card-filename';
+    filename.textContent = record.originalFileName || 'Local screenplay';
+    const open = () => go(record.id);
     preview.addEventListener('click', open); title.addEventListener('click', open);
     const menu = document.createElement('details'); menu.className = 'card-menu';
     const trigger = document.createElement('summary'); trigger.textContent = '⋯'; trigger.setAttribute('aria-label', `Options for ${record.title}`);
@@ -48,7 +45,7 @@ function render() {
     const pdfButton = document.createElement('button'); pdfButton.textContent = 'Export as PDF';
     pdfButton.addEventListener('click', async () => {
       menu.open = false;
-      try { const latest = await repository.get(record.id); if (!latest || latest.deletedAt) throw new Error('This screenplay is no longer in the library.'); await exportPDF(latest.recovery.document); }
+      try { const latest = await repository.get(record.id); if (!latest || latest.deletedAt) throw new Error('This screenplay is no longer in the library.'); const result = await exportPDF(latest.recovery.document); if (result.emojiFallback.length) error('PDF exported. Some emojis used bundled fallback artwork.'); }
       catch (failure) { error(`Could not export PDF: ${failure.message}`); }
     });
     const deleteButton = document.createElement('button'); deleteButton.textContent = 'Delete'; deleteButton.className = 'delete-script';
@@ -112,9 +109,8 @@ $('undo-delete-script').addEventListener('click', async () => {
 });
 document.addEventListener('click', event => { for (const menu of document.querySelectorAll('.card-menu[open]')) if (!menu.contains(event.target)) menu.open = false; });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') for (const menu of document.querySelectorAll('.card-menu[open]')) { menu.open = false; menu.querySelector('summary').focus(); } });
-$('new-screenplay').addEventListener('click', event => action(event.currentTarget, async () => { await folderSettings.beforeCreate(); return createAutoSavedDraft({ deferDisk: true }); }));
-$('open-fountain').addEventListener('click', event => action(event.currentTarget, () => openFileIntoLibrary()));
-$('import-copy').addEventListener('click', event => action(event.currentTarget, () => openFileIntoLibrary({ importCopy: true })));
+$('new-screenplay').addEventListener('click', event => action(event.currentTarget, () => createDraft(repository)));
+$('open-fountain').addEventListener('click', event => action(event.currentTarget, async () => importManagedFile(await fileService.importCopy(), repository)));
 $('search').addEventListener('input', render);
 $('sample-script').addEventListener('click', () => { location.href = './editor.html?sample=1'; });
 let refreshTask = null, refreshAgain = false, renderedRecords = null;
@@ -135,10 +131,11 @@ function refreshLibrary() {
       const signature = recordSignature(latest);
       records = latest;
       if (signature !== renderedRecords) { render(); renderedRecords = signature; }
-      if (errorSource !== 'action') $('library-error').hidden = true;
+      if (repository.migrationIssue) error(repository.migrationIssue, 'refresh');
+      else if (errorSource !== 'action') $('library-error').hidden = true;
       $('memory-editor').hidden = true;
     } catch (failure) {
-      error(`Could not refresh your browser library: ${failure.message}`, 'refresh');
+      error(`Could not refresh your local library: ${failure.message}`, 'refresh');
       render(); $('memory-editor').hidden = false;
     }
   })().finally(() => {
@@ -152,7 +149,7 @@ function refreshLibrary() {
 repository.subscribe(refreshLibrary);
 function returnToLibrary() {
   suspended = false;
-  for (const id of ['new-screenplay', 'open-fountain', 'import-copy']) $(id).disabled = false;
+  for (const id of ['new-screenplay', 'open-fountain']) $(id).disabled = false;
   $('search').value = '';
   if (renderedRecords !== null) render();
   repository.reconnect();
@@ -174,7 +171,7 @@ window.addEventListener('pagehide', () => { suspended = true; refreshAgain = fal
 window.addEventListener('pageshow', watchLibrary);
 document.addEventListener('visibilitychange', watchLibrary);
 // Controls become interactive only after their handlers are installed.
-for (const id of ['new-screenplay', 'open-fountain', 'import-copy']) $(id).disabled = false;
+for (const id of ['new-screenplay', 'open-fountain']) $(id).disabled = false;
 watchLibrary();
 $('search').value = '';
 await refreshLibrary();

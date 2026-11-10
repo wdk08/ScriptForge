@@ -31,7 +31,7 @@ test('real imported Piper voice persists, previews, and shares a table read with
     const { createDocument, createElement: el } = await import('/js/document.js'), { draftRecord } = await import('/js/session.js'), { repository } = await import('/js/storage.js');
     return (await repository.put(draftRecord(createDocument({ title: 'Mixed Voice Read', elements: [el('scene', 'INT. ROOM - DAY'), el('action', 'The read begins.'), el('character', 'NOAH'), el('dialogue', 'Hello from the imported voice.'), el('character', 'AVA'), el('dialogue', 'The browser voice returns.')] })))).id;
   });
-  await page.goto(`/editor.html?id=${id}`); await page.locator('#recover-changes').click(); await expect(page.locator('#pages')).toContainText('NOAH');
+  await page.goto(`/editor.html?id=${id}`); await page.locator('#pages[contenteditable=true]').waitFor(); await expect(page.locator('#pages')).toContainText('NOAH');
   const before = await page.evaluate(() => window.scriptForge.getDocument());
   await page.locator('.tools-menu summary').click(); await page.locator('#simulate-table-read').click(); await expect(page.getByLabel('Voice for NOAH', { exact: true }).locator('option').filter({ hasText: 'Reference Piper' })).toHaveCount(1);
   await page.getByLabel('Voice for NOAH', { exact: true }).selectOption({ label: 'Reference Piper (Piper) · en-US' });
