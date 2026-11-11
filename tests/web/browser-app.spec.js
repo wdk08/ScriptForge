@@ -4,7 +4,7 @@ test.beforeEach(async({context})=>context.addInitScript(()=>{window.showDirector
 test('production subpath supports editing, persistence, statistics, exports and installer choices',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://api.github.com/repos/wdk08/ScriptForge/releases/latest',route=>route.fulfill({json:{tag_name:'v1.0.1',draft:false,prerelease:false,assets:['ScriptForge_1.0.1_aarch64.dmg','ScriptForge_1.0.1_x64.dmg','ScriptForge_1.0.1_x64-setup.exe'].map(name=>({name,state:'uploaded',size:10,browser_download_url:`https://github.com/wdk08/ScriptForge/releases/download/v1.0.1/${name}`}))}}));
- await page.goto('./');await expect(page.locator('.browser-storage-note')).toContainText('does not sync');
+ await page.goto('./');await expect(page.locator('.library-footer')).toContainText('Clearing browser data can erase local screenplays.');
  expect(await page.evaluate(async()=> (await (await import('./js/writing-storage.js')).createWritingStore().list()).length)).toBe(0);
  await page.locator('#new-screenplay').click();await expect(page.locator('#pages')).toHaveAttribute('contenteditable','true');
  await page.locator('#pages').click();await page.keyboard.type('A browser story.');await page.waitForTimeout(1100);
