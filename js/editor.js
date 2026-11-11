@@ -67,7 +67,7 @@ const titlePage = setupTitlePage($('title-page'), (field, value) => {
     const state = history.apply(currentSelection, { type: 'titlePage', field, value });
     dirty = true; session.changed(state.document, currentSelection);
     features?.update(); titlePage.update(state.document); $('document-title').value = state.document.title;
-    $('workspace-title').textContent = state.document.title.toUpperCase(); updateTools();
+    updateTools();
   } catch (error) { notify(error.message); }
 }, redo => undo(redo));
 $('paste-plain-text').addEventListener('click', event => {
@@ -190,7 +190,6 @@ function render(focus = true) {
   if (root.style.getPropertyValue('--page-zoom') !== zoom) root.style.setProperty('--page-zoom', zoom);
   $('title-page').style.zoom = root.style.getPropertyValue('--page-zoom');
   if (document.activeElement !== $('document-title')) $('document-title').value = doc.title;
-  $('workspace-title').textContent = doc.title.toUpperCase();
   const scenes = doc.elements.filter(el => el.type === 'scene');
   $('scene-count').textContent = String(scenes.length);
   const nextOutline = JSON.stringify(scenes.map(scene => [scene.id,scene.text]));
@@ -475,7 +474,7 @@ $('document-title').addEventListener('input', event => {
   const state = history.apply(currentSelection, { type: 'titlePage', field: 'title', value: event.target.value });
   session.changed(state.document, currentSelection); dirty = true;
   void writing.observe(state.document, pageLayout.length, 'title');
-  features?.update(); titlePage.update(state.document); $('workspace-title').textContent = state.document.title.toUpperCase(); updateTools();
+  features?.update(); titlePage.update(state.document); updateTools();
 });
 $('document-title').addEventListener('keydown', event => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo(event.shiftKey); $('document-title').value = history.current.document.title; }

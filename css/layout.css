@@ -32,14 +32,12 @@ body.editor-app, body.library {
 .editor-app .outline[hidden] { display: none; }
 .editor-app .outline-heading { flex-shrink: 0; margin-bottom: 16px; }
 #scene-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; }
-.editor-app .outline-note { flex-shrink: 0; margin-top: 14px; padding-top: 14px; }
 .editor-app .scene-link strong { overflow-wrap: anywhere; text-transform: uppercase; }
 .sceneHeader { text-transform: uppercase; }
 .transition { text-transform: uppercase; text-align: right; }
 .transition.transition-left { text-align: left; }
 [data-type="character"], .preview-character { text-transform: uppercase; }
 .library .library-main { flex: 1; min-height: 0; width: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
-@media (max-height: 650px) { .editor-app .outline-note { display: none; } }
 @media (max-width: 720px) {
   .editor-app .outline { position: absolute; top: 0; bottom: 0; left: 0; width: 210px; z-index: 4; box-shadow: 6px 0 20px var(--sf-34281b20, #34281b20); }
 }

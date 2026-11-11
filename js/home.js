@@ -22,7 +22,6 @@ function render() {
     for (const el of (record.recovery?.document?.elements ?? []).filter(el => ['scene', 'action', 'character', 'dialogue'].includes(el.type)).slice(0, 7)) {
       const p = document.createElement('p'); p.className = `preview-${el.type}`; p.textContent = el.text.slice(0, 190); preview.append(p);
     }
-    if (!preview.querySelector('p')) { const p = document.createElement('p'); p.className = 'blank-preview'; p.textContent = 'Every story starts somewhere.'; preview.append(p); }
     const body = document.createElement('div'); body.className = 'card-body';
     const label = document.createElement('span'); label.className = `file-badge ${record.recovery?.dirty ? 'has-recovery' : ''}`;
     label.textContent = record.migrationNotice || record.recovery?.dirty && !record.managed ? 'RECOVERY AVAILABLE' : 'SAVED LOCALLY';
@@ -33,9 +32,6 @@ function render() {
       time.dateTime = modified.toISOString();
       time.textContent = `Edited ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(modified)}`;
     } else time.textContent = 'Recently opened';
-    const filename = document.createElement('div');
-    filename.className = 'card-filename';
-    filename.textContent = record.originalFileName || 'Local screenplay';
     const open = () => go(record.id);
     preview.addEventListener('click', open); title.addEventListener('click', open);
     const menu = document.createElement('details'); menu.className = 'card-menu';
@@ -66,11 +62,18 @@ function render() {
     });
     menu.addEventListener('toggle', () => { if (menu.open) for (const other of document.querySelectorAll('.card-menu[open]')) if (other !== menu) other.open = false; });
     options.append(pdfButton, exportButton, deleteButton); menu.append(trigger, options);
-    body.append(menu, label, title, time, filename); card.append(preview, body); tree.append(card);
+    body.append(menu, label, title, time);
+    if (record.originalFileName) {
+      const filename = document.createElement('div');
+      filename.className = 'card-filename';
+      filename.textContent = record.originalFileName;
+      body.append(filename);
+    }
+    card.append(preview, body); tree.append(card);
   }
   $('script-grid').replaceChildren(tree); $('empty-state').hidden = Boolean(visible.length);
-  $('empty-title').textContent = records.length ? 'No screenplays match your search.' : 'A blank page. A new possibility.';
-  $('empty-text').textContent = records.length ? 'Try another title or clear your search.' : 'Create a screenplay or open a Fountain file to start your library.';
+  $('empty-title').textContent = records.length ? 'No screenplays match your search.' : 'No screenplays yet.';
+  $('empty-text').textContent = records.length ? 'Try another title or clear your search.' : 'Create a screenplay or import a Fountain file.';
 }
 let pendingCreation = 0;
 window.scriptForgePrepareUpdate = async () => {

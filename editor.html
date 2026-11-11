@@ -15,7 +15,7 @@
     <a id="home" href="./index.html" class="home-button" title="Screenplay library" aria-label="Home">←</a>
     <img class="brand-logo" src="./scriptForgeLogo.png" width="44" height="44" alt="" aria-hidden="true">
     <div class="document-heading">
-      <div class="brand-name">SCRIPTFORGE <span class="stage-badge">SCREENPLAY EDITOR</span></div>
+      <div class="brand-name">SCRIPTFORGE</div>
       <label class="sr-only" for="document-title">Screenplay title</label>
       <input id="document-title" value="The Last Signal" maxlength="200" aria-label="Screenplay title">
       <span id="disk-save-state" class="disk-save-state" role="status">Unsaved changes</span><span id="save-state" class="save-state" role="status">Opening screenplay…</span>
@@ -57,19 +57,16 @@
     <aside id="outline" class="outline" aria-label="Screenplay outline">
       <div class="outline-heading">SCENES <span id="scene-count"></span></div>
       <div id="scene-list" role="navigation" aria-label="Scenes" tabindex="0"></div>
-      <div class="outline-note"><span class="note-icon">✦</span><p>Room for your next story.</p><small>Tab starts the next element.<br>Enter keeps you writing.</small></div>
     </aside>
     <section class="document-viewport" aria-label="Screenplay workspace">
-      <div class="workspace-caption"><span id="workspace-title">THE LAST SIGNAL</span><span>SCREENPLAY</span></div>
       <article id="title-page" class="title-page" aria-label="Screenplay title page"></article>
       <div id="pages" class="pages" contenteditable="false" role="textbox" aria-label="Screenplay editor" aria-multiline="true" spellcheck="true" autocorrect="on" autocapitalize="off" tabindex="0"></div>
-      <div class="end-hint">Your story continues here. <kbd>Enter</kbd> to add an element.</div>
     </section>
   </main>
-  <footer class="status-bar"><span><span class="status-dot"></span> <span id="element-status">Action</span></span><span id="document-stats"></span><span class="session-note">Local screenplay</span></footer>
+  <footer class="status-bar"><span><span class="status-dot"></span> <span id="element-status">Action</span></span><span id="document-stats"></span></footer>
   <div id="notice" role="status" class="notice" hidden></div>
   <dialog id="table-read-dialog" class="table-read" aria-labelledby="tr-title">
-    <header class="tr-header"><div><span class="eyebrow">SIMULATE TABLE READ</span><h1 id="tr-title"></h1></div><button id="tr-close" class="secondary-button">Back to editor</button></header>
+    <header class="tr-header"><h1 id="tr-title"></h1><button id="tr-close" class="secondary-button">Back to editor</button></header>
     <section class="tr-transport" aria-label="Table read playback">
       <div class="tr-status"><span id="tr-state" class="tr-state" role="status">Idle</span><strong id="tr-speaker">Ready to read</strong><span id="tr-position"></span><span id="tr-engine-activity" role="status"></span></div>
       <div class="tr-buttons"><button id="tr-play" class="primary-button">Play</button><button id="tr-pause" class="secondary-button">Pause</button><button id="tr-stop" class="secondary-button">Stop</button><button id="tr-restart" class="secondary-button">Restart</button><button id="tr-previous" class="secondary-button">Previous</button><button id="tr-next" class="secondary-button">Next</button><label>Playback speed<select id="tr-speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div>
@@ -87,7 +84,7 @@
     <footer class="tr-footer">Piper voices run locally. Browser voices vary by device and may use an online service. Dual dialogue plays left speaker, then right. Voice changes apply to the next speech segment.</footer>
   </dialog>
   <dialog id="screenplay-settings-dialog" aria-labelledby="screenplay-settings-title">
-    <span class="eyebrow">THIS SCREENPLAY</span><h1 id="screenplay-settings-title">Screenplay settings</h1>
+    <h1 id="screenplay-settings-title">Screenplay settings</h1>
     <p>Formatting applies to this screenplay and its PDF exports. Writing preferences and the Voice Library apply on this device. Changes save automatically.</p>
     <label class="script-setting"><input id="bold-scene-headings" type="checkbox"> Bold scene headings</label>
     <div class="scene-number-setting"><label class="script-setting"><input id="scene-numbers" type="checkbox"> Scene numbers</label><button id="redo-scene-numbers" class="secondary-button">Redo Numbers</button></div>
@@ -101,7 +98,7 @@
       <label>Email address<input id="writer-email" type="email" autocomplete="email"></label>
       <button id="save-writer-profile" class="secondary-button">Save Changes</button><p id="writer-profile-status" role="status"></p>
     </section>
-    <section class="settings-section"><h2>Voice Library</h2><p>Manage imported voice models.</p><button id="voice-library">Manage Voice Library</button></section>
+    <section class="settings-section"><h2>Voice Library</h2><button id="voice-library">Manage Voice Library</button></section>
     <section class="settings-section"><h2>Writing Preferences</h2>
       <p>These settings apply to all screenplays on this device. End a trained transition line with Return or Tab.</p>
       <details><summary>Train Transition</summary><form id="transitions-train"><label>Custom transition <input required maxlength="100" placeholder="TIME CUT TO:"></label><button>Add transition</button></form><ul id="transitions-rules"></ul></details>
@@ -111,12 +108,12 @@
     </section>
     <div class="dialog-actions"><button id="settings-done" class="primary-button">Done</button></div>
   </dialog>
-  <dialog id="help-dialog">
+  <dialog id="help-dialog" aria-labelledby="help-title">
     <form method="dialog"><button class="dialog-close" aria-label="Close keyboard guide">×</button></form>
-    <span class="eyebrow">MAKE YOURSELF AT HOME</span><h1>A little rhythm for your writing.</h1>
-    <dl><dt>⌘ / Ctrl + Click</dt><dd>Toggle continuation on a Character cue. Overrides stay in ScriptForge's browser document. Fountain files export the visible continuation text without internal metadata.</dd><dt>⌘ / Ctrl + F</dt><dd>Find across the screenplay. Add Shift + H instead for Replace. Enter and Shift + Enter navigate results; Escape closes search.</dd><dt>⌘ / Ctrl + Shift + F</dt><dd>Toggle Focus Mode. Escape returns to the writing room.</dd><dt>⌘ / Ctrl + 1–6</dt><dd>1 Scene Heading · 2 Action · 3 Character · 4 Parenthetical · 5 Dialogue · 6 Transition. Works only in the screenplay editor. Some browsers reserve these keys for tab switching and may prevent interception.</dd><dt>Plain text paste</dt><dd>Tools → Paste as Plain Text bypasses screenplay detection until switched off. Single-line paste always inserts text normally.</dd><dt>INT. / EXT.</dt><dd>Typing either prefix at the start of action creates a scene heading.</dd><dt>Enter</dt><dd>After character or parenthetical, start dialogue. After dialogue, start action. Filled lines stay intact; only blank lines change in place.</dd><dt>⌘ / Ctrl + ] / [ / \</dt><dd>Move the selected elements’ right text boundaries right / left by 5 points, or reset. Left indentation stays unchanged. Overrides stay in ScriptForge; plain Fountain omits custom margins.</dd><dt>Shift + Enter</dt><dd>A line break within the current element.</dd><dt>Tab</dt><dd>Dialogue → parenthetical; parenthetical → dialogue; character → parenthetical; empty character → transition. Filled lines create the next element below.</dd><dt>Shift + Tab</dt><dd>Advance backward through element types on a new line, or change a blank line.</dd><dt>Character cues</dt><dd>Names automatically capitalize while typing.</dd><dt>⌘ / Ctrl + Z</dt><dd>Undo. Add Shift to redo.</dd><dt>⌘ / Ctrl + S</dt><dd>Save to your local library.</dd><dt>Backspace / Delete</dt><dd>Delete text, or merge at an element boundary. Clearing a parenthetical also clears its brackets.</dd></dl>
+    <h1 id="help-title">Keyboard guide</h1>
+    <dl><dt>⌘ / Ctrl + Click</dt><dd>Toggle continuation on a Character cue. Overrides stay in ScriptForge's browser document. Fountain files export the visible continuation text without internal metadata.</dd><dt>⌘ / Ctrl + F</dt><dd>Find across the screenplay. Add Shift + H instead for Replace. Enter and Shift + Enter navigate results; Escape closes search.</dd><dt>⌘ / Ctrl + Shift + F</dt><dd>Toggle Focus Mode. Escape exits Focus Mode.</dd><dt>⌘ / Ctrl + 1–6</dt><dd>1 Scene Heading · 2 Action · 3 Character · 4 Parenthetical · 5 Dialogue · 6 Transition. Works only in the screenplay editor. Some browsers reserve these keys for tab switching and may prevent interception.</dd><dt>Plain text paste</dt><dd>Tools → Paste as Plain Text bypasses screenplay detection until switched off. Single-line paste always inserts text normally.</dd><dt>INT. / EXT.</dt><dd>Typing either prefix at the start of action creates a scene heading.</dd><dt>Enter</dt><dd>After character or parenthetical, start dialogue. After dialogue, start action. Filled lines stay intact; only blank lines change in place.</dd><dt>⌘ / Ctrl + ] / [ / \</dt><dd>Move the selected elements’ right text boundaries right / left by 5 points, or reset. Left indentation stays unchanged. Overrides stay in ScriptForge; plain Fountain omits custom margins.</dd><dt>Shift + Enter</dt><dd>A line break within the current element.</dd><dt>Tab</dt><dd>Dialogue → parenthetical; parenthetical → dialogue; character → parenthetical; empty character → transition. Filled lines create the next element below.</dd><dt>Shift + Tab</dt><dd>Advance backward through element types on a new line, or change a blank line.</dd><dt>Character cues</dt><dd>Names automatically capitalize while typing.</dd><dt>⌘ / Ctrl + Z</dt><dd>Undo. Add Shift to redo.</dd><dt>⌘ / Ctrl + S</dt><dd>Save to your local library.</dd><dt>Backspace / Delete</dt><dd>Delete text, or merge at an element boundary. Clearing a parenthetical also clears its brackets.</dd></dl>
     <p>Select across elements to format, copy, or replace them together. The second character of simultaneous dialogue uses Dual Character. The two speech blocks then appear side by side.</p>
-    <p class="dialog-note">Your screenplay saves automatically in your local library. Export creates a separate copy for sharing or backup.</p>
+    <p class="dialog-note">Export creates a separate copy for sharing or backup.</p>
   </dialog>
   <button id="focus-exit" class="focus-exit" hidden>Exit Focus Mode · Esc</button>
 <dialog id="statistics-dialog" class="feature-dialog" aria-labelledby="statistics-title"><header><h1 id="statistics-title">Character Dialogue Statistics</h1><button id="statistics-close" aria-label="Close statistics">×</button></header><table><thead><tr><th><button data-stat-sort="name">Character</button></th><th><button data-stat-sort="blocks">Blocks</button></th><th><button data-stat-sort="words">Words</button></th><th><button data-stat-sort="percent">Percent</button></th></tr></thead><tbody id="statistics-rows"></tbody></table><p id="statistics-totals"></p></dialog>

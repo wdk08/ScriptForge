@@ -185,8 +185,8 @@
   --sf-fffefa: #252110;
 }
 
-:root{--theme-accent:#763232;--theme-on-accent:#fff;--theme-focus:#8c3939}
-:root[data-theme="dark"]{--theme-accent:#a95d5d;--theme-on-accent:#fff;--theme-focus:#e5a4a4}
+:root{--theme-accent:#761B29;--theme-on-accent:#fff;--theme-focus:#8c3939}
+:root[data-theme="dark"]{--theme-on-accent:#fff;--theme-focus:#e5a4a4}
 .primary-button{background:var(--theme-accent);color:var(--theme-on-accent)}
 .primary-button:hover:not(:disabled){background:var(--theme-accent);filter:brightness(.9)}
 :root[data-theme="dark"] .pages{caret-color:#f1c3c3}

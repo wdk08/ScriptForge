@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "scope": "Locked dependency superset, including build/test and other-target dependencies. Metadata is supplemented by retained upstream notices and source; it is not proof of every embedded binary component.",
-  "npmLockSha256": "3f1a9c45f5680d22c17585de2f1b012e1ff95165f02bada934ae512af4bcc5b7",
-  "cargoLockSha256": "91e94e342fad3aeebaf9617545ef4683712aa8cff6d4cd237cd143bb9ffaa620",
+  "npmLockSha256": "5aaefe37e5bf5f8cf0347c16dda9e8d38c778a797828519ef576fa4ba20cc96c",
+  "cargoLockSha256": "e1bb6cef836d37e7684afd67bded401d664606dc348f133b9c48a8da7a3fe1d2",
   "packages": [
     {
       "ecosystem": "cargo",
