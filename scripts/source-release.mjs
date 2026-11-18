@@ -1,8 +1,10 @@
 // Copyright (C) 2026 wdk08. SPDX-License-Identifier: GPL-3.0-only
 // Create a local source release; this script never uploads or reads signing keys.
-import {readFile,writeFile,copyFile,mkdir,mkdtemp,cp,lstat,access} from 'node:fs/promises';
+import {readFile,writeFile,copyFile,mkdir,mkdtemp,cp,lstat,access,rm} from 'node:fs/promises';
 import {join,dirname,resolve,basename} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createWriteStream} from 'node:fs';
+import {pipeline} from 'node:stream/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {auditPublic} from './audit-public.mjs';
@@ -22,6 +24,36 @@ export async function snapshotApplication(app){
  for(const file of [...new Set(files)].sort()){if(!sourcePathAllowed(file))throw new Error(`Unsafe source path: ${file}`);const stat=await lstat(file);if(!stat.isFile())throw new Error(`Non-file source entry: ${file}`);const bytes=await readFile(file);await mkdir(dirname(join(app,file)),{recursive:true});await copyFile(file,join(app,file));manifest.push({path:`app/${file}`,sha256:digest(bytes)});}
  return manifest;
 }
+export async function readUpstreamSource(item, {cacheDir, allowDownload, request=fetch}) {
+ let bytes;
+ if(cacheDir) {
+  try { bytes=await readFile(join(cacheDir,item.file)); }
+  catch(error) { if(error.code!=='ENOENT')throw error; }
+ }
+ if(!bytes) {
+  if(!allowDownload)throw new Error(`Missing cached source: ${item.name}`);
+  const response=await request(item.url);
+  if(item.fallback && [404,410].includes(response.status)) {
+   await response.body?.cancel();
+   const mirror=await request(item.fallback.url);
+   if(!mirror.ok)throw new Error(`Source fallback failed: ${item.name} (HTTP ${mirror.status})`);
+   const scratch=await mkdtemp(join(tmpdir(),'scriptforge-upstream-source-'));
+   try {
+    const archive=join(scratch,'source.tar.gz');
+    await pipeline(mirror.body,createWriteStream(archive));
+    // Read one entry only. The pinned digest still applies to the original upstream archive.
+    bytes=execFileSync('tar',['-xOzf',archive,'--',item.fallback.member],{maxBuffer:256*1024*1024});
+   } finally {
+    await rm(scratch,{recursive:true,force:true});
+   }
+  } else {
+   if(!response.ok)throw new Error(`Source download failed: ${item.name} (HTTP ${response.status})`);
+   bytes=Buffer.from(await response.arrayBuffer());
+  }
+ }
+ if(digest(bytes)!==item.sha256)throw new Error(`Upstream source checksum failed: ${item.name}`);
+ return bytes;
+}
 export async function sourceRelease({cacheDir=process.env.SCRIPTFORGE_SOURCE_CACHE,allowDownload=true}={}){
  await verifyPiper();const audit=await auditPublic();if(audit.findings.length)throw new Error('Resolve the source audit findings before creating a release archive.');
  execFileSync(process.execPath,['scripts/license-inventory.mjs'],{stdio:'inherit'});
@@ -29,9 +61,9 @@ export async function sourceRelease({cacheDir=process.env.SCRIPTFORGE_SOURCE_CAC
  const work=await mkdtemp(join(tmpdir(),'scriptforge-source-release-')),name=`ScriptForge-${pkg.version}-source`,tree=join(work,name),app=join(tree,'app');await mkdir(app,{recursive:true});
  const manifest=await snapshotApplication(app);
  const deps=join(tree,'dependencies');await mkdir(deps);const downloads=JSON.parse(await readFile('third-party/source-downloads.json'));
- for(const item of downloads){let bytes;const cached=cacheDir&&join(cacheDir,item.file);if(cached)try{bytes=await readFile(cached);}catch(error){if(error.code!=='ENOENT')throw error;}
-  if(!bytes){if(!allowDownload)throw new Error(`Missing cached source: ${item.name}`);const response=await fetch(item.url);if(!response.ok)throw new Error(`Source download failed: ${item.name}`);bytes=Buffer.from(await response.arrayBuffer());}
-  if(digest(bytes)!==item.sha256)throw new Error(`Upstream source checksum failed: ${item.name}`);await writeFile(join(deps,item.file),bytes);manifest.push({path:`dependencies/${item.file}`,sha256:item.sha256});
+ for(const item of downloads){
+  const bytes=await readUpstreamSource(item,{cacheDir,allowDownload});
+  await writeFile(join(deps,item.file),bytes);manifest.push({path:`dependencies/${item.file}`,sha256:item.sha256});
  }
  // Cargo vendor retains exact crate sources, MPL notices, registry checksums and licenses.
  const vendor=join(deps,'cargo');const config=execFileSync('cargo',['vendor','--locked','--offline','--versioned-dirs','--manifest-path','src-tauri/Cargo.toml',vendor],{encoding:'utf8',maxBuffer:10_000_000});await mkdir(join(app,'.cargo'),{recursive:true});await writeFile(join(app,'.cargo/config.toml'),config.replaceAll(vendor,'../dependencies/cargo'));

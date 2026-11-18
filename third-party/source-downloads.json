@@ -5,6 +5,10 @@
     "url": "https://codeload.github.com/microsoft/onnxruntime/tar.gz/refs/tags/v1.22.0",
     "sha256": "08b078eb7afbf376064b2b0f1781e3d78151cac0592988a0c0ec78bf72fde810",
     "file": "onnxruntime-v1.22.0.tar.gz",
+    "fallback": {
+      "url": "https://github.com/wdk08/ScriptForge/releases/download/v1.2.1/ScriptForge-1.2.1-source.tar.gz",
+      "member": "ScriptForge-1.2.1-source/dependencies/onnxruntime-v1.22.0.tar.gz"
+    },
     "license": "MIT",
     "scope": "Upstream source, build/dependency recipes and third-party notices for the bundled WebAssembly runtime; no native MKL/CUDA/TensorRT runtime is shipped."
   },

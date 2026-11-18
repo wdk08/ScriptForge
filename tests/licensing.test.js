@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile,writeFile,mkdtemp,mkdir,rm} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {tmpdir} from 'node:os';
+import {execFileSync} from 'node:child_process';
 import {reviewExpression,verifyPiper} from '../scripts/license-inventory.mjs';
-import {sourcePathAllowed,digest,verifySourceTree} from '../scripts/source-release.mjs';
+import {sourcePathAllowed,digest,verifySourceTree,readUpstreamSource} from '../scripts/source-release.mjs';
 import {desktopAssets} from '../scripts/build-desktop.mjs';
 
 test('releases carry GPL terms and notices inside the desktop assets',async()=>{
@@ -31,4 +32,26 @@ test('release workflow gates installers on matching corresponding-source upload'
 test('source snapshot verification rejects changed or private content before packaging',async()=>{
  const root=await mkdtemp(join(tmpdir(),'scriptforge-source-verification-'));
  try{const files=[];for(const file of ['LICENSE','COPYRIGHT','THIRD_PARTY_NOTICES.md','SOURCE_CODE.md','scripts/build-piper.mjs','vendor/piper/provenance.json']){await mkdir(dirname(join(root,'app',file)),{recursive:true});await writeFile(join(root,'app',file),'source');files.push({path:`app/${file}`,sha256:digest('source')});}await mkdir(join(root,'app/.cargo'));await writeFile(join(root,'app/.cargo/config.toml'),'directory = "../dependencies/cargo"');await writeFile(join(root,'SOURCE-MANIFEST.json'),JSON.stringify({files}));await verifySourceTree(root);await writeFile(join(root,'app/LICENSE'),'changed');await assert.rejects(verifySourceTree(root),/snapshot changed/);files[0]={path:'app/.env',sha256:digest('source')};await writeFile(join(root,'SOURCE-MANIFEST.json'),JSON.stringify({files}));await assert.rejects(verifySourceTree(root),/Private path/);}finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('missing upstream source falls back to the prior archive only with the pinned checksum',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'scriptforge-source-fallback-'));
+ try {
+  const file='upstream.tar.gz',bytes=Buffer.from('exact upstream archive');
+  const item={name:'upstream',file,url:'https://upstream.invalid',sha256:digest(bytes),
+   fallback:{url:'https://mirror.invalid',member:file}};
+  await writeFile(join(root,file),bytes);
+  const archive=join(root,'previous-release.tar.gz');
+  execFileSync('tar',['-czf',archive,'-C',root,file]);
+  const requested=[];
+  const options={allowDownload:true,request:async url=>{
+   requested.push(url);
+   return url===item.url ? new Response(null,{status:404}) : new Response(await readFile(archive));
+  }};
+  assert.deepEqual(await readUpstreamSource(item,options),bytes);
+  assert.deepEqual(requested,[item.url,item.fallback.url]);
+  await assert.rejects(readUpstreamSource({...item,sha256:digest('different archive')},options),/checksum failed/);
+ } finally {
+  await rm(root,{recursive:true,force:true});
+ }
 });
