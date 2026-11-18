@@ -1,3 +1,4 @@
+import { fragmentLines } from './renderer.js';
 import { textPoint } from './inline-layout.js';
 import { editableElements, caret } from './editing.js';
 import { textRangeRect } from './screenplay-format.js';
@@ -15,7 +16,7 @@ export function readSelection(root) {
   const selection = window.getSelection();
   if (!selection?.anchorNode || !selection.focusNode) return null;
   const anchor = domPoint(selection.anchorNode, selection.anchorOffset, root);
-  const focus = domPoint(selection.focusNode, selection.focusOffset, root);
+  const focus = selection.isCollapsed && anchor ? { ...anchor } : domPoint(selection.focusNode, selection.focusOffset, root);
   return anchor && focus ? { anchor, focus } : null;
 }
 
@@ -31,7 +32,10 @@ export function restoreSelection(root, modelSelection, { scroll = false } = {}) 
     const offset = Math.min(fragment.textContent.length, Math.max(0, point.offset - Number(fragment.dataset.start)));
     return { ...textPoint(fragment,offset), fragment };
   }
-  const anchor = locate(modelSelection.anchor), focus = locate(modelSelection.focus);
+  const anchor = locate(modelSelection.anchor);
+  const { id, offset } = modelSelection.focus;
+  const focus = id === modelSelection.anchor.id && offset === modelSelection.anchor.offset
+    ? anchor : locate(modelSelection.focus);
   if (!anchor || !focus) return;
   root.focus({ preventScroll: true });
   window.getSelection().setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
@@ -134,23 +138,43 @@ export function verticalCaret(root, pages, selection, direction, preferredX = nu
  * Native contenteditable block hit-testing can choose a different line from its ink.
  * Only single, undragged clicks use this; native drag/double-click selection remains intact.
  */
-export function visualClickCaret(root,x,y) {
- let best=null;
- for(const fragment of root.querySelectorAll('[data-element-id]')) {
-  const box=fragment.getBoundingClientRect(),zoom=box.width/parseFloat(fragment.style.width||box.width);
-  if(y<box.top-8*zoom||y>box.bottom+8*zoom||x<box.left-4*zoom||x>box.right+4*zoom)continue;
-  const start=Number(fragment.dataset.start),end=Number(fragment.dataset.end),text=fragment.textContent.replace(/\u200b$/,'');
-  const walker=document.createTreeWalker(fragment,NodeFilter.SHOW_TEXT);let node,base=0;
-  while((node=walker.nextNode())) {
-   const rawBase=base;base+=node.length;if(node.parentElement.closest('[data-inline-marker],[data-caret-sentinel]'))continue;
-   for(const {segment,index} of new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(node.textContent)){
-    const range=document.createRange();range.setStart(node,index);range.setEnd(node,index+segment.length);
-    const emoji=node.parentElement.closest('.screenplay-emoji');const rect=emoji?.getBoundingClientRect()??textRangeRect(range);if(!rect.width||!rect.height)continue;
-    const dy=Math.max(rect.top-y,y-rect.bottom,0),dx=Math.max(rect.left-x,x-rect.right,0),distance=dy*dy*16+dx*dx;
-    if(!best||distance<best.distance){const after=x>(rect.left+rect.right)/2;best={distance,selection:caret(fragment.dataset.elementId,Math.min(end,start+rawBase+index+(after?segment.length:0)))};}
-   }
+const clickGraphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+export function visualClickCaret(root, x, y) {
+  const page = root.ownerDocument.elementFromPoint(x, y)?.closest('.screenplay-page');
+  if (!page || !root.contains(page)) return null;
+  for (const fragment of page.querySelectorAll('[data-element-id]')) {
+    const box = fragment.getBoundingClientRect();
+    if (y < box.top || y >= box.bottom || x < box.left || x > box.right) continue;
+    const lines = fragmentLines.get(fragment);
+    if (!lines?.length) return null;
+    const row = Math.min(lines.length - 1, Math.floor((y - box.top) / (box.height / lines.length)));
+    const line = lines[row], id = fragment.dataset.elementId, base = Number(fragment.dataset.start);
+    let best = line.start, distance = Infinity;
+    const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let node, offset = base;
+    while ((node = walker.nextNode())) {
+      const start = offset;
+      offset += node.length;
+      if (start >= line.end) break;
+      if (offset <= line.start || node.parentElement.closest('[data-inline-marker],[data-caret-sentinel]')) continue;
+      for (const { segment, index } of clickGraphemes.segment(node.textContent)) {
+        const at = start + index;
+        if (at < line.start || at >= line.end || segment === '\n') continue;
+        range.setStart(node, index);
+        range.setEnd(node, index + segment.length);
+        const emoji = node.parentElement.closest('.screenplay-emoji');
+        const rect = emoji?.getBoundingClientRect() ?? textRangeRect(range);
+        if (!rect.width) continue;
+        const left = Math.abs(x - rect.left), right = Math.abs(x - rect.right);
+        if (Math.min(left, right) < distance) {
+          distance = Math.min(left, right);
+          best = right < left ? Math.min(line.end, at + segment.length) : at;
+        }
+      }
+    }
+    return caret(id, best);
   }
-  if(!text&&y>=box.top&&y<=box.bottom){const dx=Math.abs(x-box.left);if(!best||dx*dx<best.distance)best={distance:dx*dx,selection:caret(fragment.dataset.elementId,start)};}
- }
- return best?.selection??null;
+  return null;
 }

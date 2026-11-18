@@ -137,12 +137,80 @@ export function paginate(units, { contentHeight = PAGE.contentHeight, lineHeight
   return pages;
 }
 
+/** Reuse page packing when a single Action or Dialogue keeps its measured height. */
+export function updateMeasuredPages(previous, before, after, measure) {
+  if (!before || before.settings !== after.settings || before.elements.length !== after.elements.length) return null;
+  let changed;
+  for (let i = 0; i < after.elements.length; i++) {
+    const old = before.elements[i], el = after.elements[i];
+    if (old === el) continue;
+    if (changed || old.id !== el.id || old.type !== el.type || !['action', 'dialogue'].includes(el.type)
+        || old.rightMarginOffsetPt !== el.rightMarginOffsetPt || old.text === el.text
+        || Boolean(old.text.trim()) !== Boolean(el.text.trim())) return null;
+    changed = el;
+  }
+  if (!changed) return null;
+
+  const locations = [];
+  let oldLineCount = 0;
+  let dual = false;
+  for (const [pageIndex, page] of previous.entries()) {
+    for (const [itemIndex, item] of page.items.entries()) {
+      item.columns.forEach((column, columnIndex) => {
+        const start = column.findIndex(line => line.id === changed.id);
+        if (start < 0) return;
+        const count = column.findLastIndex(line => line.id === changed.id) - start + 1;
+        locations.push({ pageIndex, itemIndex, columnIndex, start, count });
+        oldLineCount += count;
+        dual = item.kind === 'dual';
+      });
+    }
+  }
+  if (!locations.length) return null;
+  const lines = measure(changed, dual, after.settings);
+  if (lines.length !== oldLineCount) return null;
+  const pages = previous.slice();
+  let offset = 0;
+  for (const { pageIndex, itemIndex, columnIndex, start, count } of locations) {
+    if (pages[pageIndex] === previous[pageIndex]) {
+      pages[pageIndex] = { ...pages[pageIndex], items: pages[pageIndex].items.slice() };
+    }
+    const items = pages[pageIndex].items;
+    const item = items[itemIndex];
+    const columns = item.columns.slice();
+    const column = columns[columnIndex].slice();
+    const replacement = lines.slice(offset, offset + count).map(line => ({ ...line, id: changed.id, type: changed.type }));
+    column.splice(start, count, ...replacement);
+    columns[columnIndex] = column;
+    items[itemIndex] = { ...item, columns };
+    offset += count;
+  }
+  return pages;
+}
+
 /** Browser DOM measurement, cached per text/type/column width. No line-count guesses. */
 export function createMeasurer(container,{emojiRenderer='native'}={}) {
   const cache = new Map();
+  const byElement = new Map();
   return (el, dual = false, settings = {}) => {
     const key = JSON.stringify([el.type, el.text, el.inlineStyles, dual, el.rightMarginOffsetPt ?? 0, settings.boldSceneHeadings === true, el.type === 'scene' && settings.sceneNumbers === true && Boolean(el.sceneNumber)]);
-    if (cache.has(key)) return cache.get(key);
+    const variant = String(dual) + ':' + Boolean(settings.boldSceneHeadings) + ':' + Boolean(settings.sceneNumbers);
+    if (el.id) {
+      const variants = byElement.get(el.id);
+      const previous = variants?.get(variant);
+      if (previous?.key === key) return previous.lines;
+    }
+    const remember = lines => {
+      if (el.id) {
+        if (!byElement.has(el.id)) {
+          if (byElement.size >= 20000) byElement.delete(byElement.keys().next().value);
+          byElement.set(el.id, new Map());
+        }
+        byElement.get(el.id).set(variant, { key, lines });
+      }
+      return lines;
+    };
+    if (cache.has(key)) return remember(cache.get(key));
     const paragraph = document.createElement('div');
     paragraph.className = `screenplay-element ${CLASS_NAMES[el.type] ?? 'actionLine'} ${dual ? 'dualMeasure' : ''} ${transitionClass(el)}`;
     if (el.type === 'scene') paragraph.style.fontWeight = settings.boldSceneHeadings === true ? '700' : '400';
@@ -182,6 +250,6 @@ export function createMeasurer(container,{emojiRenderer='native'}={}) {
     // Prevent unbounded stale text measurements in long editing sessions.
     if (cache.size >= 3000) cache.delete(cache.keys().next().value);
     cache.set(key, result);
-    return result;
+    return remember(result);
   };
 }

@@ -1,9 +1,11 @@
 import { isEmojiCluster } from './emoji.js';
 import { renderInline } from './inline-layout.js';
-import { applyScreenplayFont } from './unicode-fonts.js';
+import { applyScreenplayFont, needsUnicodeFont } from './unicode-fonts.js';
 import { elementLayout } from './right-margins.js';
 import { CLASS_NAMES, PAGE } from './pagination.js';
 import { transitionClass } from './transitions.js';
+
+export const fragmentLines = new WeakMap();
 
 function renderColumn(lines, byId, dual, settings) {
   const column = document.createElement('div');
@@ -11,9 +13,9 @@ function renderColumn(lines, byId, dual, settings) {
   const grouped = [];
   for (const line of lines) {
     if (grouped.at(-1)?.id === line.id) {
-      grouped.at(-1).end = line.end; grouped.at(-1).count++;
+      grouped.at(-1).end = line.end; grouped.at(-1).count++; grouped.at(-1).lines.push(line);
       grouped.at(-1).continuationText = (grouped.at(-1).continuationText ?? '') + (line.continuationText ?? '');
-    } else grouped.push({ ...line, count: 1 });
+    } else grouped.push({ ...line, count: 1, lines: [line] });
   }
   for (const group of grouped) {
     const model = byId.get(group.id);
@@ -43,6 +45,7 @@ function renderColumn(lines, byId, dual, settings) {
       const sentinel = document.createElement('span'); sentinel.dataset.caretSentinel = '';
       sentinel.textContent = '\u200b'; fragment.append(sentinel);
     }
+    fragmentLines.set(fragment, group.lines);
     column.append(fragment);
   }
   return column;
@@ -94,16 +97,26 @@ export function invalidateNativeEdit(root, fragment) {
   for (const record of rendered.get(root) ?? []) if (record.node.contains(fragment)) record.signature = null;
 }
 /** Retain unchanged page DOM, so typing does not invalidate an entire screenplay. */
-export function renderPages(root, pages, doc) {
+export function renderPages(root, pages, doc, { reusePageObjects = false } = {}) {
   const byId = new Map(doc.elements.map(el => [el.id, el]));
+  const unicode = new Map();
+  const usesUnicode = element => {
+    if (!unicode.has(element.id)) unicode.set(element.id, needsUnicodeFont(element.text));
+    return unicode.get(element.id);
+  };
   const previous = rendered.get(root) ?? [], next = [];
   let changedPages = 0;
   pages.forEach((page,index) => {
+    const prior = previous[index];
+    if (reusePageObjects && prior?.page === page && prior.signature !== null && root.children[index] === prior.node) {
+      next.push(prior);
+      return;
+    }
     // Include visible text and formatting as well as line ranges: an edit can
     // change text without changing the line/page boundaries. IDs are never regenerated.
     const text = page.items.map(item => item.columns.map(column => column.map(line => {
       const el = byId.get(line.id);
-      return [el.text.slice(line.start,line.end), el.rightMarginOffsetPt, el.sceneNumber];
+      return [el.text.slice(line.start,line.end), el.rightMarginOffsetPt, el.sceneNumber, el.text === el.text.slice(line.start,line.end) ? null : usesUnicode(el)];
     })));
     const signature = JSON.stringify([page,text,doc.settings?.boldSceneHeadings,doc.settings?.sceneNumbers]);
     let node = previous[index]?.node;
@@ -112,7 +125,7 @@ export function renderPages(root, pages, doc) {
       if (root.children[index]) root.replaceChild(node,root.children[index]); else root.append(node);
       changedPages++;
     }
-    next.push({signature,node});
+    next.push({signature,node,page});
   });
   while(root.children.length > pages.length) root.lastElementChild.remove();
   rendered.set(root,next);

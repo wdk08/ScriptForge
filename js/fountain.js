@@ -70,7 +70,7 @@ function parseBody(source, options = {}) {
         const start = i;
         const [, key, first] = lines[i++].raw.match(keyLine);
         const values = first ? [first] : [];
-        while (i < end && !keyLine.test(lines[i].raw)) values.push(lines[i++].raw.replace(/^(?: {3,}|\t)/, ''));
+        while (i < end && !keyLine.test(lines[i].raw)) values.push(lines[i++].raw.replace(/^(?: {3,4}|\t)/, ''));
         add('titleField', start, i, values.join('\n'), { key });
       }
       doc.title = doc.elements.find(el => /^title$/i.test(el.key))?.text ?? doc.title;

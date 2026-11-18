@@ -161,7 +161,12 @@ async fn desktop_export(
         .ok_or_else(|| Failure::new("AbortError", "Export cancelled."))?
         .into_path()
         .map_err(|error| Failure::new("FilePermissionError", error.to_string()))?;
-    storage::export_file(&path, &bytes)?;
+    let path = if extension == "fountain" {
+        storage::export_fountain_file(&path, &bytes)?
+    } else {
+        storage::export_file(&path, &bytes)?;
+        path
+    };
     Ok(json!({"kind":"export","name":path.file_name().unwrap_or_default().to_string_lossy()}))
 }
 #[tauri::command]

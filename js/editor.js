@@ -18,7 +18,7 @@ import { carryCharacterVoice, renameCharacter } from './characters.js';
 import { screenplaySettings } from './screenplay-settings.js';
 import { parseFountain } from './fountain.js';
 import { EditorHistory, editableElements, caret, selectedText, orderedSelection } from './editing.js';
-import { createMeasurer, layoutUnits, paginate } from './pagination.js';
+import { createMeasurer, layoutUnits, paginate, updateMeasuredPages } from './pagination.js';
 import { ensureScreenplayFonts } from './screenplay-format.js';
 import { renderPages, invalidateNativeEdit } from './renderer.js';
 import { readSelection, restoreSelection, adjacentCaret, domPoint, verticalCaret } from './selection.js';
@@ -174,6 +174,7 @@ function updateTools() {
   $('element-status').textContent = type.replace(/^dual/, 'Dual ').replace(/^[a-z]/, letter => letter.toUpperCase());
   $('undo').disabled = !history.past.length; $('redo').disabled = !history.future.length;
 }
+let lastLaidOutDocument;
 function render(focus = true) {
   if (composition) return;
   const doc = history.current.document;
@@ -181,8 +182,10 @@ function render(focus = true) {
   $('scene-numbers').checked = screenplaySettings(doc).sceneNumbers;
   const viewport = document.querySelector('.document-viewport');
   const scrollTop = viewport.scrollTop, horizontal = viewport.scrollLeft, sceneScrollTop = $('scene-list').scrollTop;
-  pageLayout = paginate(layoutUnits(doc, measure));
-  renderPages(root, pageLayout, doc);
+  const reusedLayout = updateMeasuredPages(pageLayout, lastLaidOutDocument, doc, measure);
+  pageLayout = reusedLayout ?? paginate(layoutUnits(doc, measure));
+  renderPages(root, pageLayout, doc, { reusePageObjects: Boolean(reusedLayout) });
+  lastLaidOutDocument = doc;
   titlePage.update(doc);
   const requestedZoom = $('zoom').value;
   const maxZoom = Math.max(.25, (viewport.clientWidth - 36) / 816);
@@ -489,9 +492,10 @@ async function exportFountain() {
   try {
     const doc = history.current.document;
     let warning;
-    await fileService.download(fountainForSaving(doc, { onWarning: text => { warning = text; } }), fountainFilename(doc.title)); closeMenu(); document.querySelector('.export-menu').open = false;
-    notify(warning || 'Fountain copy exported.');
-  } catch (error) { notify(`Export stopped: ${error.message}`); }
+    const result = await fileService.download(fountainForSaving(doc, { onWarning: text => { warning = text; } }), fountainFilename(doc.title));
+    closeMenu(); document.querySelector('.export-menu').open = false;
+    notify(warning || (result.kind === 'download' ? 'Fountain download started.' : `Exported ${result.name}.`));
+  } catch (error) { if (error.name !== 'AbortError') notify(`Export stopped: ${error.message}`); }
 }
 $('export-fountain').addEventListener('click', exportFountain);
 $('save').addEventListener('click', saveToLibrary);

@@ -32,6 +32,13 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
   for (const el of doc.elements) if (el.type === 'scene') el.text = el.text.trim().toUpperCase();
   doc.elements = doc.elements.map(el => !el.text && draftingTypes.includes(el.type) ? {...el,type:'action'} : el);
   let speech = false, projected = false;
+  // Fountain reads all title fields as a single header before the screenplay body.
+  const titleFields = doc.elements.filter(el => el.type === 'titleField');
+  if (titleFields.length) {
+    const body = doc.elements.filter(el => el.type !== 'titleField');
+    const unchangedHeader = titleFields.every((el, index) => doc.elements[index] === el);
+    if (!unchangedHeader) doc.elements = [...titleFields, ...body.filter((el, index) => index !== 0 || el.type !== 'whitespace')];
+  }
   for (const el of doc.elements) {
     if (el.type === 'whitespace') continue;
     const orphan = ['dialogue','parenthetical'].includes(el.type) && !speech;
@@ -41,12 +48,13 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
     const dialogueSpace = el.type === 'dialogue' && el.text.split('\n').some(line =>
       line.trim() ? line.trimStart() !== line : line === '  ');
     const invalidScene = el.type === 'scene' && !/^[\p{L}\p{N}]/u.test(inlinePlain(el.text));
+    const cueWithLiteralCaret = el.type === 'character' && el.text.trimEnd().endsWith('^');
     const singleLine = ['scene','character','transition','centered','lyric','section','synopsis'].includes(el.type) && el.text.includes('\n');
     const hiddenDelimiter = (el.type === 'note' && (el.text.includes(']]') || el.text.endsWith(']')))
       || (el.type === 'boneyard' && el.text.includes('*/'));
     const speechSyntax = el.type === 'dialogue' && el.text.split('\n').some(line =>
       /^(?:[!@>~=]|\.[\p{L}\p{N}]|#+(?:\s|$)|\(.*\)$|\[\[.*\]\]$|\/\*.*\*\/$)/u.test(line.trim()));
-    if (orphan || incomplete || trimmed || dialogueSpace || invalidScene || singleLine || hiddenDelimiter || speechSyntax) {
+    if (orphan || incomplete || trimmed || dialogueSpace || invalidScene || cueWithLiteralCaret || singleLine || hiddenDelimiter || speechSyntax) {
       el.type = 'action'; delete el.dual; delete el.continuation; delete el.sceneNumber; delete el.depth; delete el.rightMarginOffsetPt;
       projected = true;
     }
@@ -57,10 +65,36 @@ export function fountainForSaving(document, { onWarning = () => {} } = {}) {
   // Keep its literal text, using separate explicit Action blocks only in the
   // export copy when one multiline block cannot express those boundaries.
   doc.elements = doc.elements.flatMap(el => {
-    if (el.type !== 'action' || !el.text.split('\n').slice(1).some(line => line === '  ' || /^[.!@>~#=]/.test(line.trimStart()))) return [el];
+    if (el.type !== 'action' || !el.text.split('\n').slice(1).some(line => line === '  ' || /^(?:[.!@>~#=]|\[\[|\/\*)/.test(line.trimStart()))) return [el];
     projected = true;
     return el.text.split('\n').map(text => createElement('action', text));
   });
+  // Fountain joins consecutive spoken lines into a single Dialogue block.
+  // Preserve their physical line break and compare against that portable shape.
+  const portable = [];
+  for (const el of doc.elements) {
+    if (el.type !== 'dialogue') { portable.push(el); continue; }
+    let prior = portable.length - 1;
+    while (portable[prior]?.type === 'whitespace') prior--;
+    const previous = portable[prior];
+    if (!['character', 'dialogue', 'parenthetical', 'lyric'].includes(previous?.type)) {
+      portable.push(el);
+      continue;
+    }
+    const separators = portable.slice(prior + 1);
+    const blanks = separators.reduce((count, item) => count + (item.text.match(/\r\n|\r|\n/g)?.length ?? 0), 0);
+    if (separators.length) {
+      // A bare blank line would end speech in Fountain. Encode it as a
+      // manual blank within Dialogue so both the gap and speaker survive.
+      portable.length = prior + 1;
+      projected = true;
+    }
+    if (previous.type === 'dialogue') {
+      portable[prior] = { ...previous, text: previous.text + '\n'.repeat(blanks + 1) + el.text };
+      projected = true;
+    } else portable.push(blanks ? { ...el, text: '\n'.repeat(blanks) + el.text } : el);
+  }
+  doc.elements = portable;
   if (projected) onWarning(FOUNTAIN_LAYOUT_WARNING);
   if (!doc.source || explicitStructure) return serializeFountain(doc, { canonical: true });
   // Preserve exact imported spelling whenever the arrangement still permits it.
@@ -130,10 +164,11 @@ export class DocumentSession {
     // File-reference/hash changes still require a forced commit after disk I/O.
     if (generation < this.persistedGeneration || (!force && generation === this.persistedGeneration && !this.storageError)) return;
     if (snapshot.document.id !== this.record.id) snapshot = { ...snapshot, document: { ...snapshot.document, id: this.record.id } };
-    const recovery = { ...snapshot, dirty: documentFingerprint(snapshot.document) !== this.record.savedFingerprint, at: Date.now() };
+    const fingerprint = documentFingerprint(snapshot.document);
+    const recovery = { ...snapshot, dirty: fingerprint !== this.record.savedFingerprint, at: Date.now() };
     const prior = this.record.recovery;
     const record = { ...this.record, title: snapshot.document.title, modifiedAt: recovery.at, recovery,
-      recoveryHistory: prior && documentFingerprint(prior.document) !== documentFingerprint(snapshot.document)
+      recoveryHistory: prior && documentFingerprint(prior.document) !== fingerprint
         ? [prior, ...(this.record.recoveryHistory ?? [])].slice(0, 3) : this.record.recoveryHistory ?? [] };
     try {
       this.record = await this.repository.put(record, this.record.revision);

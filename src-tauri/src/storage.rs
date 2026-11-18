@@ -464,6 +464,20 @@ impl NativeBackups {
         }
     }
 }
+/// A save panel can return a name without the Fountain extension.
+pub fn export_fountain_file(path: &Path, bytes: &[u8]) -> Result<PathBuf> {
+    if path.extension().is_some_and(|suffix| suffix.eq_ignore_ascii_case("fountain")) {
+        export_file(path, bytes)?;
+        return Ok(path.to_owned());
+    }
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".fountain");
+    let destination = PathBuf::from(name);
+    // The panel confirmed the chosen name, so the appended name must be new.
+    exclusive(&destination, bytes)?;
+    Ok(destination)
+}
+
 /// Export destinations are selected separately from autosave and always use an OS save dialog.
 pub fn export_dev_copy(path: &Path, bytes: &[u8]) -> Result<()> { exclusive(path, bytes) }
 pub fn export_file(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -501,6 +515,22 @@ pub fn export_file(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fountain_export_appends_the_extension_without_overwriting_another_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let choice = directory.path().join("Script");
+        let destination = directory.path().join("Script.fountain");
+        let text = "INT. ROOM - DAY\n\nShe says, “Café.”";
+        assert_eq!(export_fountain_file(&choice, text.as_bytes()).unwrap(), destination);
+        assert_eq!(fs::read_to_string(&destination).unwrap(), text);
+        assert!(export_fountain_file(&choice, b"Different").is_err());
+        assert_eq!(fs::read_to_string(&destination).unwrap(), text);
+        assert!(!choice.exists());
+        assert_eq!(export_fountain_file(&destination, b"Confirmed replacement").unwrap(), destination);
+        let uppercase = directory.path().join("Other.FOUNTAIN");
+        assert_eq!(export_fountain_file(&uppercase, text.as_bytes()).unwrap(), uppercase);
+    }
+
     #[test]
     fn dev_sandbox_imports_copies_and_refuses_external_grants() {
         let root = tempfile::tempdir().unwrap();

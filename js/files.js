@@ -55,7 +55,12 @@ export function createFileService(environment = globalThis) {
   function download(source, name) {
     if (desktopInvoke(environment)) return exportDesktop(source, name, environment);
     const url = environment.URL.createObjectURL(new Blob([source], { type: 'text/plain;charset=utf-8' }));
-    const link = environment.document.createElement('a'); link.href = url; link.download = name; link.click();
+    const link = environment.document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.hidden = true;
+    environment.document.body.append(link);
+    try { link.click(); } finally { link.remove(); }
     environment.setTimeout(() => environment.URL.revokeObjectURL(url), 1000);
     return { kind: 'download', name, hash: null, source };
   }
